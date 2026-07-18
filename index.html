@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CatalogueX — dashboard</title>
+<meta name="description" content="CatalogueX fashion catalogue dashboard">
+<meta name="theme-color" content="#33508F">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root{
@@ -16,6 +18,17 @@
     --danger:#B3372E; --danger-bg:#FBEAE8;
     --radius:8px; --radius-lg:12px;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --shadow:0 8px 24px rgba(34,31,26,.08);
+  }
+  html[data-theme="dark"]{
+    --bg:#14130F; --surface:#1C1B17; --surface-2:#24231E;
+    --border:#2E2C27; --border-strong:#3D3A33;
+    --text:#F3F0E8; --text-2:#B0ACA0; --text-3:#7A766C;
+    --accent:#7BA0E8; --accent-bg:#1E2A44; --accent-text:#C5D6F7;
+    --success:#3DBF7A; --success-bg:#143224;
+    --warning:#E0A04A; --warning-bg:#3A2A12;
+    --danger:#E06B63; --danger-bg:#3A1A18;
+    --shadow:0 8px 24px rgba(0,0,0,.35);
   }
   *{box-sizing:border-box;}
   body{margin:0; background:var(--bg); color:var(--text); font-size:14px; line-height:1.5;}
@@ -90,6 +103,37 @@
   .sel-item{position:relative;}
   .sel-item.selected{outline:2px solid var(--accent);}
   .locked-note{background:var(--warning-bg); color:var(--warning); border-radius:var(--radius); padding:8px 10px; font-size:12px; margin-bottom:12px;}
+  .menu-btn{display:none;}
+  .nav-section{font-size:11px;color:var(--text-3);padding:12px 10px 6px;text-transform:uppercase;letter-spacing:.04em;}
+  .kbd{font-size:10px;border:1px solid var(--border-strong);border-radius:4px;padding:1px 5px;color:var(--text-3);}
+  .metric-sub{font-size:11px;color:var(--text-3);margin:4px 0 0;}
+  .stock-ctrl{display:inline-flex;align-items:center;gap:4px;margin-top:8px;}
+  .stock-ctrl button{width:28px;height:28px;border-radius:6px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);cursor:pointer;}
+  .stock-ctrl span{min-width:28px;text-align:center;font-weight:600;font-size:13px;}
+  .two-col{display:grid;grid-template-columns:1.2fr 1fr;gap:16px;align-items:start;}
+  .alert-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);}
+  .alert-row:last-child{border-bottom:none;}
+  .icon-btn.active{color:var(--warning);}
+  .cmd-backdrop{position:fixed;inset:0;background:rgba(20,18,14,.45);z-index:80;display:flex;justify-content:center;padding-top:12vh;}
+  .cmd{width:min(520px,calc(100vw - 24px));background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;}
+  .cmd input{border:none;border-bottom:1px solid var(--border);border-radius:0;padding:14px 16px;font-size:15px;width:100%;background:var(--surface);color:var(--text);}
+  .cmd-list{max-height:280px;overflow-y:auto;}
+  .cmd-item{padding:10px 16px;cursor:pointer;}
+  .cmd-item:hover,.cmd-item.active{background:var(--accent-bg);color:var(--accent-text);}
+  .share-view{max-width:980px;margin:0 auto;padding:24px 16px 48px;}
+  .share-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--text-2);}
+  .btn{display:inline-flex;align-items:center;gap:6px;}
+  @media (max-width:900px){
+    .two-col{grid-template-columns:1fr;}
+    .menu-btn{display:inline-flex;}
+    .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:40;transform:translateX(-105%);transition:transform .2s ease;box-shadow:var(--shadow);width:240px;}
+    .sidebar.open{transform:translateX(0);}
+    .sidebar-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:35;}
+    main{padding:16px;}
+    .topbar input[type=search]{order:10;min-width:100%;max-width:100%;}
+  }
+  @media print{.topbar,.sidebar,.toolbar,.toast-stack,.menu-btn{display:none!important;}main{padding:0;}}
 </style>
 </head>
 <body>
@@ -135,30 +179,42 @@ function icon(name, size){
     dashboard:'<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
     catalog:'<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/>',
     filter:'<polygon points="22 3 2 3 10 12.5 10 19 14 21 14 12.5 22 3"/>',
-    duplicate:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V4a2 2 0 0 1 2-2h10"/>'
+    duplicate:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V4a2 2 0 0 1 2-2h10"/>',
+    star:'<polygon points="12 2 15 9 22 9 17 14 19 21 12 17 5 21 7 14 2 9 9 9"/>',
+    moon:'<path d="M21 14.5A8.5 8.5 0 1 1 12.5 3 7 7 0 0 0 21 14.5z"/>',
+    sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    settings:'<circle cx="12" cy="12" r="3"/><path d="M4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4"/>',
+    menu:'<line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>',
+    print:'<path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+    alert:'<path d="M10.3 4.3 2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><line x1="12" y1="10" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+(p[name]||'')+'</svg>';
 }
 
 /* ---------- state ---------- */
 var uid = function(p){ return p+'_'+Math.random().toString(36).slice(2,9); };
-var STORAGE_KEY = 'cataloguex-state-v1';
+var STORAGE_KEY = 'cataloguex-state-v2';
 
 var defaultState = {
   role: 'Admin',
   view: 'overview',
+  theme: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light',
+  sidebarOpen: false,
+  cmdOpen: false,
+  cmdQuery: '',
+  settings: { brandName: 'CatalogueX', lowStockThreshold: 5, currency: 'INR', defaultShareDays: 7 },
   catalogues: [
-    {id:'c1', name:'Chamak Winter 2026', status:'Published', updatedAt: Date.now()-1000*60*60*2},
-    {id:'c2', name:'Festive Kurtas', status:'Draft', updatedAt: Date.now()-1000*60*60*26},
-    {id:'c3', name:'Aavritti Essentials', status:'Published', updatedAt: Date.now()-1000*60*60*96}
+    {id:'c1', name:'Chamak Winter 2026', status:'Published', favorite:true, updatedAt: Date.now()-1000*60*60*2},
+    {id:'c2', name:'Festive Kurtas', status:'Draft', favorite:false, updatedAt: Date.now()-1000*60*60*26},
+    {id:'c3', name:'Aavritti Essentials', status:'Published', favorite:true, updatedAt: Date.now()-1000*60*60*96}
   ],
   items: [
-    {id:'i1', catalogueId:'c1', name:'Navy kurta', category:'Kurtas', color:'Navy', size:'M', price:1299, stock:18, image:''},
-    {id:'i2', catalogueId:'c1', name:'Rust saree', category:'Sarees', color:'Rust', size:'Free', price:3450, stock:4, image:''},
-    {id:'i3', catalogueId:'c2', name:'Ivory co-ord', category:'Co-ord sets', color:'Ivory', size:'S', price:2199, stock:11, image:''},
-    {id:'i4', catalogueId:'c2', name:'Emerald dress', category:'Dresses', color:'Emerald', size:'L', price:2799, stock:0, image:''},
-    {id:'i5', catalogueId:'c3', name:'Navy dress', category:'Dresses', color:'Navy', size:'XL', price:2599, stock:9, image:''},
-    {id:'i6', catalogueId:'c3', name:'Rust kurta', category:'Kurtas', color:'Rust', size:'M', price:1099, stock:22, image:''}
+    {id:'i1', catalogueId:'c1', sku:'CW-NK-001', name:'Navy kurta', category:'Kurtas', color:'Navy', size:'M', price:1299, stock:18, image:''},
+    {id:'i2', catalogueId:'c1', sku:'CW-RS-014', name:'Rust saree', category:'Sarees', color:'Rust', size:'Free', price:3450, stock:4, image:''},
+    {id:'i3', catalogueId:'c2', sku:'FK-IC-003', name:'Ivory co-ord', category:'Co-ord sets', color:'Ivory', size:'S', price:2199, stock:11, image:''},
+    {id:'i4', catalogueId:'c2', sku:'FK-ED-008', name:'Emerald dress', category:'Dresses', color:'Emerald', size:'L', price:2799, stock:0, image:''},
+    {id:'i5', catalogueId:'c3', sku:'AE-ND-002', name:'Navy dress', category:'Dresses', color:'Navy', size:'XL', price:2599, stock:9, image:''},
+    {id:'i6', catalogueId:'c3', sku:'AE-RK-011', name:'Rust kurta', category:'Kurtas', color:'Rust', size:'M', price:1099, stock:22, image:''}
   ],
   shareLinks: [
     {id:'s1', catalogueId:'c3', token:'ax91kd', viewOnly:true, password:false, watermark:true, expiresDays:12, createdAt: Date.now()-1000*60*60*70, views:24},
@@ -175,12 +231,76 @@ var defaultState = {
 var state = null;
 
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function migrateState(raw){
+  var baseSettings = { brandName: 'CatalogueX', lowStockThreshold: 5, currency: 'INR', defaultShareDays: 7 };
+  var s = Object.assign(clone(defaultState), raw || {});
+  s.settings = Object.assign(clone(baseSettings), (raw && raw.settings) || {});
+  s.browse = Object.assign(clone(defaultState.browse), (raw && raw.browse) || {});
+  s.catalogues = (s.catalogues || []).map(function(c){ return Object.assign({ favorite: false }, c); });
+  s.items = (s.items || []).map(function(it, idx){ return Object.assign({ sku: it.sku || ('SKU-' + (idx + 1)) }, it); });
+  s.selectedItems = s.selectedItems || [];
+  s.shareSelectedItems = s.shareSelectedItems || [];
+  s.theme = s.theme || 'light';
+  s.sidebarOpen = !!s.sidebarOpen;
+  s.cmdOpen = false;
+  s.cmdQuery = '';
+  return s;
+}
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', state.theme === 'dark' ? 'dark' : 'light');
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', state.theme === 'dark' ? '#1C1B17' : '#33508F');
+}
+function lowAt(){ return Number((state.settings && state.settings.lowStockThreshold) || 5); }
+function inventoryValue(){
+  return state.items.reduce(function(sum, it){ return sum + (Number(it.price) || 0) * (Number(it.stock) || 0); }, 0);
+}
+function lowStockItems(){
+  return state.items.filter(function(i){ return i.stock > 0 && i.stock <= lowAt(); }).sort(function(a, b){ return a.stock - b.stock; });
+}
+function outStockItems(){ return state.items.filter(function(i){ return i.stock <= 0; }); }
+function parseShareRoute(){
+  var raw = (location.hash || '').replace(/^#\/?/, '');
+  var m = raw.match(/^view\/([a-z0-9]+)/i);
+  return m ? m[1] : null;
+}
+function isShareExpired(link){
+  if (!link.expiresDays) return false;
+  return ((Date.now() - link.createdAt) / 86400000) > link.expiresDays;
+}
+function itemsForShare(link){
+  if (link.type === 'selection' && link.itemIds) {
+    return state.items.filter(function(i){ return link.itemIds.indexOf(i.id) > -1; });
+  }
+  return state.items.filter(function(i){ return i.catalogueId === link.catalogueId; });
+}
+function shareUrl(token){ return location.origin + location.pathname + '#/view/' + token; }
+function exportBackup(){
+  var blob = new Blob([JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), state: state }, null, 2)], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'cataloguex-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  log('Backup exported', 'JSON snapshot');
+  persist();
+  toast('Backup downloaded');
+}
+function downloadCsvTemplate(){
+  var csv = 'name,sku,category,color,size,price,stock\nNavy kurta,CW-NK-001,Kurtas,Navy,M,1299,10\n';
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'cataloguex-template.csv';
+  a.click();
+  toast('CSV template downloaded');
+}
 
 async function loadState(){
   try{
     var res = await window.storage.get(STORAGE_KEY, false);
-    if(res && res.value){ state = JSON.parse(res.value); return; }
-  }catch(e){ /* no saved state yet */ }
+    if(res && res.value){ state = migrateState(JSON.parse(res.value)); return; }
+    var old = await window.storage.get('cataloguex-state-v1', false);
+    if(old && old.value){ state = migrateState(JSON.parse(old.value)); persist(); return; }
+  }catch(e){}
   state = clone(defaultState);
 }
 var saveTimer = null;
@@ -216,52 +336,137 @@ function timeAgo(ts){
   if(h<24) return h+'h ago';
   return Math.round(h/24)+'d ago';
 }
-function money(n){ return '\u20B9' + Number(n).toLocaleString('en-IN'); }
+function money(n){
+  var cur = (state && state.settings && state.settings.currency) || 'INR';
+  try { return new Intl.NumberFormat(cur==='INR'?'en-IN':'en-US',{style:'currency',currency:cur,maximumFractionDigits:0}).format(Number(n)||0); }
+  catch(e){ return (cur==='INR' ? ('\u20B9') : ('$')) + Number(n||0).toLocaleString('en-IN'); }
+}
 function statusBadge(s){
   var cls = s==='Published' ? 'badge-success' : (s==='Draft' ? 'badge-warning' : 'badge-neutral');
   return '<span class="badge '+cls+'">'+s+'</span>';
 }
 function availOf(stock){
   if(stock<=0) return {label:'Out of stock', cls:'badge-danger'};
-  if(stock<=5) return {label:'Low stock', cls:'badge-warning'};
+  if(stock<=lowAt()) return {label:'Low stock', cls:'badge-warning'};
   return {label:'In stock', cls:'badge-success'};
 }
 function catName(id){ var c = state.catalogues.find(function(x){return x.id===id;}); return c? c.name : 'Unknown'; }
 
 /* ---------- render ---------- */
-function render(){
+function renderShareView(token){
+  var link = state.shareLinks.find(function(s){ return s.token === token; });
   var app = document.getElementById('app');
-  app.innerHTML = topbarHtml() + '<div class="layout">' + sidebarHtml() + '<main id="main">' + viewHtml() + '</main></div>';
+  if (!link) {
+    app.innerHTML = '<div class="share-view"><h1>Link not found</h1><p class="subtle">This share link is invalid or was revoked.</p><button class="btn" id="back-dash">Back to dashboard</button></div>';
+    document.getElementById('back-dash').onclick = function(){ location.hash = ''; render(); };
+    return;
+  }
+  if (isShareExpired(link)) {
+    app.innerHTML = '<div class="share-view"><h1>Link expired</h1><p class="subtle">Ask the sender for a new share link.</p></div>';
+    return;
+  }
+  var seenKey = 'cx-viewed-' + token;
+  try {
+    if (!sessionStorage.getItem(seenKey)) {
+      link.views = (link.views || 0) + 1;
+      sessionStorage.setItem(seenKey, '1');
+      persist();
+    }
+  } catch (e) {}
+  var items = itemsForShare(link);
+  var title = link.type === 'selection' ? (link.label || 'Custom selection') : catName(link.catalogueId);
+  var brand = (state.settings && state.settings.brandName) || 'CatalogueX';
+  app.innerHTML = '<div class="share-view"><div class="toolbar" style="justify-content:space-between;align-items:flex-start;">' +
+    '<div><div class="brand" style="margin-bottom:6px;"><div class="dot"></div>' + esc(brand) + '</div>' +
+    '<h1 style="margin:0;">' + esc(title) + '</h1><p class="subtle" style="margin:4px 0 0;">' + items.length + ' designs' +
+    (link.viewOnly ? ' · view only' : '') + (link.watermark ? ' · watermarked' : '') + '</p></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;"><span class="pill">Shared catalogue</span>' +
+    '<button class="btn btn-sm" id="print-share">' + icon('print', 14) + ' Print</button>' +
+    '<button class="btn btn-sm" id="back-dash">Dashboard</button></div></div>' +
+    '<div class="share-grid">' + items.map(function(it){
+      var a = availOf(it.stock);
+      return '<div class="card"><div class="thumb">' + (it.image ? '<img src="' + it.image + '" alt="">' : icon('hanger', 24)) + '</div>' +
+        '<p style="font-weight:600;margin:0 0 2px;">' + esc(it.name) + '</p>' +
+        '<p class="muted" style="margin:0 0 6px;">' + esc(it.category) + ' · ' + esc(it.color) + ' · ' + esc(it.size) + '</p>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;"><strong>' + money(it.price) + '</strong>' +
+        '<span class="badge ' + a.cls + '">' + a.label + '</span></div>' +
+        (it.sku ? '<p class="muted" style="margin:6px 0 0;">SKU ' + esc(it.sku) + '</p>' : '') + '</div>';
+    }).join('') + (items.length ? '' : '<p class="empty" style="grid-column:1/-1;">No designs.</p>') + '</div></div>';
+  document.getElementById('print-share').onclick = function(){ window.print(); };
+  document.getElementById('back-dash').onclick = function(){ location.hash = ''; render(); };
+}
+function cmdPaletteHtml(){
+  var q = (state.cmdQuery || '').toLowerCase();
+  var cmds = [
+    { id: 'overview', label: 'Go to Overview' },
+    { id: 'upload', label: 'Go to Upload' },
+    { id: 'manage', label: 'Go to Catalogues' },
+    { id: 'browse', label: 'Go to Browse' },
+    { id: 'share', label: 'Go to Share' },
+    { id: 'settings', label: 'Open Settings' },
+    { id: 'theme', label: 'Toggle dark / light theme' },
+    { id: 'export', label: 'Export full backup (JSON)' },
+    { id: 'csv', label: 'Download CSV template' },
+    { id: 'newcat', label: 'Create new catalogue' }
+  ].filter(function(c){ return !q || c.label.toLowerCase().indexOf(q) > -1; });
+  return '<div class="cmd-backdrop" id="cmd-backdrop"><div class="cmd">' +
+    '<input id="cmd-input" type="search" placeholder="Type a command..." value="' + esc(state.cmdQuery || '') + '" autocomplete="off">' +
+    '<div class="cmd-list">' + (cmds.map(function(c, i){
+      return '<div class="cmd-item ' + (i === 0 ? 'active' : '') + '" data-cmd="' + c.id + '">' + esc(c.label) + '</div>';
+    }).join('') || '<div class="cmd-item">No matches</div>') + '</div></div></div>';
+}
+function render(){
+  applyTheme();
+  var token = parseShareRoute();
+  if (token) { renderShareView(token); return; }
+  var app = document.getElementById('app');
+  app.innerHTML = topbarHtml() +
+    (state.sidebarOpen ? '<div class="sidebar-backdrop" id="sidebar-backdrop"></div>' : '') +
+    '<div class="layout">' + sidebarHtml() + '<main id="main">' + viewHtml() + '</main></div>' +
+    (state.cmdOpen ? cmdPaletteHtml() : '');
   bindGlobal();
   bindView();
+  if (state.cmdOpen) bindCmd();
 }
 
 function topbarHtml(){
+  var brand = (state.settings && state.settings.brandName) || 'CatalogueX';
   return '' +
   '<div class="topbar">' +
-    '<div class="brand"><div class="dot"></div>CatalogueX</div>' +
-    '<input id="global-search" type="search" placeholder="Search all catalogues and items" value="'+esc(state.browse.q)+'">' +
+    '<button class="icon-btn menu-btn" id="menu-toggle" title="Menu">' + icon('menu', 18) + '</button>' +
+    '<div class="brand"><div class="dot"></div>' + esc(brand) + '</div>' +
+    '<input id="global-search" type="search" placeholder="Search items (or press / )" value="' + esc(state.browse.q) + '">' +
+    '<button class="btn btn-sm" id="cmd-open" title="Commands">' + icon('search', 14) + ' <span class="kbd">Ctrl K</span></button>' +
     '<div class="spacer"></div>' +
-    (canEdit() ? '<button class="btn btn-primary" id="new-catalogue-btn">'+icon('plus',15)+' New catalogue</button>' : '') +
+    '<button class="icon-btn" id="theme-toggle" title="Toggle theme">' + (state.theme === 'dark' ? icon('sun', 16) : icon('moon', 16)) + '</button>' +
+    (canEdit() ? '<button class="btn btn-primary" id="new-catalogue-btn">' + icon('plus', 15) + ' New catalogue</button>' : '') +
     '<select class="role-select" id="role-select">' +
-      ['Admin','Editor','Viewer'].map(function(r){ return '<option '+(r===state.role?'selected':'')+'>'+r+'</option>'; }).join('') +
+      ['Admin', 'Editor', 'Viewer'].map(function(r){ return '<option ' + (r === state.role ? 'selected' : '') + '>' + r + '</option>'; }).join('') +
     '</select>' +
   '</div>';
 }
 
 function sidebarHtml(){
   var items = [
-    {v:'overview', i:'dashboard', label:'Overview'},
-    {v:'upload', i:'upload', label:'Upload'},
-    {v:'manage', i:'catalog', label:'Catalogues', count: state.catalogues.length},
-    {v:'browse', i:'search', label:'Browse & search', count: state.items.length},
-    {v:'share', i:'share', label:'Share & security', count: state.shareLinks.length},
-    {v:'activity', i:'activity', label:'Activity log'}
+    { v: 'overview', i: 'dashboard', label: 'Overview', k: '1' },
+    { v: 'upload', i: 'upload', label: 'Upload', k: '2' },
+    { v: 'manage', i: 'catalog', label: 'Catalogues', count: state.catalogues.length, k: '3' },
+    { v: 'browse', i: 'search', label: 'Browse & search', count: state.items.length, k: '4' },
+    { v: 'share', i: 'share', label: 'Share & security', count: state.shareLinks.length, k: '5' },
+    { v: 'activity', i: 'activity', label: 'Activity log', k: '6' },
+    { v: 'settings', i: 'settings', label: 'Settings', k: '7' }
   ];
-  return '<nav class="sidebar">' + items.map(function(it){
-    return '<div class="navitem '+(state.view===it.v?'active':'')+'" data-nav="'+it.v+'">'+icon(it.i,16)+'<span>'+it.label+'</span>' +
-      (it.count!==undefined ? '<span class="count">'+it.count+'</span>' : '') + '</div>';
-  }).join('') + '</nav>';
+  return '<nav class="sidebar ' + (state.sidebarOpen ? 'open' : '') + '"><div class="nav-section">Workspace</div>' +
+    items.map(function(it){
+      return '<div class="navitem ' + (state.view === it.v ? 'active' : '') + '" data-nav="' + it.v + '">' +
+        icon(it.i, 16) + '<span>' + it.label + '</span>' +
+        (it.count !== undefined ? '<span class="count">' + it.count + '</span>' : '<span class="kbd">' + it.k + '</span>') +
+      '</div>';
+    }).join('') +
+    '<div class="nav-section">Alerts</div>' +
+    '<div class="navitem" data-nav="browse" data-alert="low">' + icon('alert', 16) + '<span>Low stock</span><span class="count">' + lowStockItems().length + '</span></div>' +
+    '<div class="navitem" data-nav="browse" data-alert="out">' + icon('alert', 16) + '<span>Out of stock</span><span class="count">' + outStockItems().length + '</span></div>' +
+  '</nav>';
 }
 
 function viewHtml(){
@@ -273,6 +478,7 @@ function viewHtml(){
     case 'browse': return browseHtml();
     case 'share': return shareHtml();
     case 'activity': return activityHtml();
+    case 'settings': return settingsHtml();
     default: return '';
   }
 }
@@ -282,29 +488,65 @@ function roleLockedHtml(title, msg){
 }
 
 function overviewHtml(){
-  var totalItems = state.items.length;
-  var activeLinks = state.shareLinks.length;
-  var lowStock = state.items.filter(function(i){ return i.stock>0 && i.stock<=5; }).length;
-  var outStock = state.items.filter(function(i){ return i.stock<=0; }).length;
+  var low = lowStockItems();
+  var out = outStockItems();
+  var value = inventoryValue();
+  var published = state.catalogues.filter(function(c){ return c.status === 'Published'; }).length;
+  var brand = (state.settings && state.settings.brandName) || 'CatalogueX';
   return '' +
-  '<h1>Overview</h1><p class="subtle">Signed in as '+state.role+'</p>' +
+  '<h1>Overview</h1><p class="subtle">Signed in as ' + state.role + ' · ' + esc(brand) + '</p>' +
   '<div class="grid grid-4" style="margin-bottom:20px;">' +
-    metricCard('Catalogues', state.catalogues.length) +
-    metricCard('Total items', totalItems) +
-    metricCard('Active share links', activeLinks) +
-    metricCard('Low / out of stock', lowStock+' / '+outStock) +
+    metricCard('Catalogues', state.catalogues.length, published + ' published') +
+    metricCard('Total items', state.items.length, out.length + ' out of stock') +
+    metricCard('Inventory value', money(value), 'stock x price') +
+    metricCard('Share links', state.shareLinks.length, low.length + ' low-stock SKUs') +
   '</div>' +
-  '<h2 style="font-size:14px; margin:0 0 8px;">Recent activity</h2>' +
-  '<div class="card">' + (state.activity.slice(0,6).map(function(a){
-    return '<div style="display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--border);">' +
-      '<span class="muted" style="min-width:70px;">'+timeAgo(a.ts)+'</span>' +
-      '<span style="flex:1;"><strong>'+a.action+'</strong> — '+esc(a.detail)+'</span>' +
-      '<span class="badge badge-neutral">'+a.role+'</span>' +
-    '</div>';
-  }).join('') || '<p class="muted">No activity yet.</p>') + '</div>';
+  '<div class="two-col">' +
+    '<div class="card"><h2 style="font-size:14px; margin:0 0 8px;">Recent activity</h2>' +
+      (state.activity.slice(0, 7).map(function(a){
+        return '<div style="display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--border);">' +
+          '<span class="muted" style="min-width:70px;">' + timeAgo(a.ts) + '</span>' +
+          '<span style="flex:1;"><strong>' + esc(a.action) + '</strong> - ' + esc(a.detail) + '</span>' +
+          '<span class="badge badge-neutral">' + esc(a.role) + '</span></div>';
+      }).join('') || '<p class="muted">No activity yet.</p>') +
+    '</div>' +
+    '<div class="card"><h2 style="font-size:14px; margin:0 0 8px;">Stock alerts</h2>' +
+      (low.concat(out).slice(0, 8).map(function(it){
+        var a = availOf(it.stock);
+        return '<div class="alert-row"><div><strong>' + esc(it.name) + '</strong><div class="muted">' +
+          esc(catName(it.catalogueId)) + (it.sku ? ' · ' + esc(it.sku) : '') +
+          '</div></div><span class="badge ' + a.cls + '">' + it.stock + ' left</span></div>';
+      }).join('') || '<p class="muted">All stocked up - no alerts.</p>') +
+      '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<button class="btn btn-sm" data-nav="browse" data-alert="low">Review low stock</button>' +
+        '<button class="btn btn-sm" id="export-backup-btn">' + icon('download', 13) + ' Backup</button>' +
+      '</div></div></div>';
 }
-function metricCard(label,val){
-  return '<div class="card"><p class="metric-label">'+label+'</p><p class="metric-value">'+val+'</p></div>';
+function metricCard(label, val, sub){
+  return '<div class="card"><p class="metric-label">' + label + '</p><p class="metric-value">' + val + '</p>' +
+    (sub ? '<p class="metric-sub">' + sub + '</p>' : '') + '</div>';
+}
+function settingsHtml(){
+  var s = state.settings || {};
+  return '<h1>Settings</h1><p class="subtle">Workspace preferences for this browser (saved locally).</p><div class="two-col">' +
+    '<div class="card"><h2 style="font-size:14px;margin:0 0 12px;">Brand & inventory</h2>' +
+    '<div class="field"><label>Brand name</label><input type="text" id="set-brand" value="' + esc(s.brandName || 'CatalogueX') + '"></div>' +
+    '<div class="field"><label>Currency</label><select id="set-currency">' +
+      '<option value="INR"' + (s.currency === 'INR' ? ' selected' : '') + '>INR</option>' +
+      '<option value="USD"' + (s.currency === 'USD' ? ' selected' : '') + '>USD</option>' +
+      '<option value="EUR"' + (s.currency === 'EUR' ? ' selected' : '') + '>EUR</option></select></div>' +
+    '<div class="field"><label>Low-stock threshold</label><input type="number" id="set-low" min="1" value="' + (s.lowStockThreshold || 5) + '"></div>' +
+    '<div class="field"><label>Default share expiry (days, blank = never)</label><input type="number" id="set-share-days" min="1" value="' + (s.defaultShareDays == null ? '' : s.defaultShareDays) + '"></div>' +
+    '<div class="field"><label>Theme</label><select id="set-theme"><option value="light"' + (state.theme === 'light' ? ' selected' : '') + '>Light</option><option value="dark"' + (state.theme === 'dark' ? ' selected' : '') + '>Dark</option></select></div>' +
+    '<button class="btn btn-primary" id="set-save">' + icon('check', 14) + ' Save settings</button></div>' +
+    '<div class="card"><h2 style="font-size:14px;margin:0 0 12px;">Data & backup</h2>' +
+    '<p class="muted" style="margin:0 0 12px;">Export or restore a full JSON backup. Data stays in this browser unless exported.</p>' +
+    '<div style="display:flex;flex-direction:column;gap:8px;">' +
+    '<button class="btn" id="set-export">' + icon('download', 14) + ' Export backup (JSON)</button>' +
+    '<button class="btn" id="set-csv-template">' + icon('download', 14) + ' Download CSV template</button>' +
+    '<label class="btn" style="justify-content:center;cursor:pointer;">' + icon('upload', 14) + ' Import backup<input type="file" id="set-import" accept="application/json,.json" style="display:none;"></label>' +
+    (canManage() ? '<button class="btn btn-danger" id="set-reset">Reset demo data</button>' : '') +
+    '</div><p class="muted" style="margin:14px 0 0;">Shortcuts: <span class="kbd">/</span> search · <span class="kbd">Ctrl K</span> commands · <span class="kbd">1-7</span> navigate · <span class="kbd">D</span> theme</p></div></div>';
 }
 
 function uploadHtml(){
@@ -316,6 +558,7 @@ function uploadHtml(){
       '<h2 style="font-size:14px; margin:0 0 12px;">Add one item</h2>' +
       '<div class="field"><label>Catalogue</label><select id="up-cat">'+catOptions+'</select></div>' +
       '<div class="field"><label>Item name</label><input type="text" id="up-name" placeholder="e.g. Navy kurta"></div>' +
+      '<div class="field"><label>SKU (optional)</label><input type="text" id="up-sku" placeholder="CW-NK-001"></div>' +
       '<div class="grid grid-4">' +
         '<div class="field"><label>Category</label><input type="text" id="up-category" placeholder="Kurtas"></div>' +
         '<div class="field"><label>Colour</label><input type="text" id="up-color" placeholder="Navy"></div>' +
@@ -328,13 +571,14 @@ function uploadHtml(){
     '</div>' +
     '<div class="card">' +
       '<h2 style="font-size:14px; margin:0 0 12px;">Bulk import (CSV)</h2>' +
-      '<p class="muted" style="margin:0 0 8px;">Columns expected: name, category, color, size, price, stock. First row must be headers.</p>' +
+      '<p class="muted" style="margin:0 0 8px;">Columns: name, sku, category, color, size, price, stock. First row = headers.</p>' +
       '<div class="field"><label>Target catalogue</label><select id="bulk-cat">'+catOptions+'</select></div>' +
       '<div class="drop" id="drop-zone">' +
         icon('upload',24) +
         '<p style="margin:8px 0 2px; font-size:13px;">Drag a CSV file here, or</p>' +
-        '<input type="file" id="bulk-file" accept=".csv" style="max-width:220px; margin:6px auto 0;">' +
+        '<input type="file" id="bulk-file" accept=".csv,text/csv" style="max-width:220px; margin:6px auto 0;">' +
       '</div>' +
+      '<button class="btn btn-sm" id="csv-template-btn" style="margin-bottom:10px;">'+icon('download',13)+' Download CSV template</button>' +
       '<div id="bulk-preview"></div>' +
     '</div>' +
   '</div>';
@@ -343,10 +587,15 @@ function uploadHtml(){
 function manageHtml(){
   var q = (state.manageQuery||'').toLowerCase();
   var status = state.manageStatus || '';
+  var favOnly = !!state.manageFavOnly;
   var list = state.catalogues.filter(function(c){
     if(q && c.name.toLowerCase().indexOf(q)===-1) return false;
     if(status && c.status!==status) return false;
+    if(favOnly && !c.favorite) return false;
     return true;
+  }).sort(function(a,b){
+    if(!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
+    return (b.updatedAt||0)-(a.updatedAt||0);
   });
   return '' +
   '<h1>Catalogues</h1><p class="subtle">'+state.catalogues.length+' catalogues total</p>' +
@@ -357,6 +606,7 @@ function manageHtml(){
       '<option '+(status==='Published'?'selected':'')+'>Published</option>' +
       '<option '+(status==='Draft'?'selected':'')+'>Draft</option>' +
     '</select>' +
+    '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);"><input type="checkbox" id="manage-fav" '+(favOnly?'checked':'')+' style="width:auto;"> Favourites only</label>' +
   '</div>' +
   '<div class="grid grid-cards">' + (list.map(catalogueCardHtml).join('') || '<p class="empty" style="grid-column:1/-1;">No catalogues match.</p>') + '</div>';
 }
@@ -365,11 +615,12 @@ function catalogueCardHtml(c){
   var itemCount = state.items.filter(function(i){ return i.catalogueId===c.id; }).length;
   return '<div class="card">' +
     '<div class="thumb">'+icon('hanger',26)+'</div>' +
-    '<p style="font-weight:600; margin:0 0 2px;">'+esc(c.name)+'</p>' +
+    '<p style="font-weight:600; margin:0 0 2px;display:flex;align-items:center;gap:6px;">'+esc(c.name)+(c.favorite?' <span class="badge badge-warning">Fav</span>':'')+'</p>' +
     '<p class="muted" style="margin:0 0 8px;">'+itemCount+' items \u00B7 updated '+timeAgo(c.updatedAt)+'</p>' +
     '<div style="display:flex; align-items:center; justify-content:space-between;">' +
       statusBadge(c.status) +
       '<div>' +
+        '<button class="icon-btn '+(c.favorite?'active':'')+'" data-fav-cat="'+c.id+'" title="Favourite">'+icon('star',15)+'</button>' +
         '<button class="icon-btn" data-view-cat="'+c.id+'" title="View items">'+icon('search',15)+'</button>' +
         (canEdit() ? '<button class="icon-btn" data-edit-cat="'+c.id+'" title="Edit">'+icon('edit',15)+'</button>' : '') +
         (canEdit() ? '<button class="icon-btn" data-dup-cat="'+c.id+'" title="Duplicate">'+icon('duplicate',15)+'</button>' : '') +
@@ -388,15 +639,14 @@ function browseHtml(){
   return '' +
   '<h1>Browse & search</h1><p class="subtle">Every item across every catalogue, in one searchable view.</p>' +
   '<div class="toolbar">' +
-    '<input type="search" id="b-q" placeholder="Search by name" style="max-width:220px;" value="'+esc(b.q)+'">' +
+    '<input type="search" id="b-q" placeholder="Search by name or SKU" style="max-width:220px;" value="'+esc(b.q)+'">' +
     selectFilter('b-category','Category', cats, b.category) +
     selectFilter('b-color','Colour', colors, b.color) +
     selectFilter('b-size','Size', sizes, b.size) +
     selectFilter('b-avail','Availability', ['In stock','Low stock','Out of stock'], b.avail) +
     '<select id="b-sort" style="max-width:160px;">' +
-      ['newest','Price: low to high','Price: high to low'].map(function(s){
-        var lbl = s==='newest' ? 'Sort: newest' : s;
-        return '<option value="'+s+'" '+(b.sort===s?'selected':'')+'>'+lbl+'</option>';
+      [['newest','Sort: newest'],['Price: low to high','Price: low to high'],['Price: high to low','Price: high to low'],['stock','Stock: low first']].map(function(pair){
+        return '<option value="'+pair[0]+'" '+(b.sort===pair[0]?'selected':'')+'>'+pair[1]+'</option>';
       }).join('') +
     '</select>' +
   '</div>' +
@@ -422,7 +672,7 @@ function filterItems(){
   var b = state.browse;
   var q = b.q.toLowerCase();
   var res = state.items.filter(function(i){
-    if(q && i.name.toLowerCase().indexOf(q)===-1) return false;
+    if(q){ var hay=(i.name+' '+(i.sku||'')+' '+i.category+' '+i.color).toLowerCase(); if(hay.indexOf(q)===-1) return false; }
     if(b.category && i.category!==b.category) return false;
     if(b.color && i.color!==b.color) return false;
     if(b.size && i.size!==b.size) return false;
@@ -431,6 +681,7 @@ function filterItems(){
   });
   if(b.sort==='Price: low to high') res.sort(function(a,c){return a.price-c.price;});
   if(b.sort==='Price: high to low') res.sort(function(a,c){return c.price-a.price;});
+  if(b.sort==='stock') res.sort(function(a,c){return a.stock-c.stock;});
   return res;
 }
 function itemCardHtml(it){
@@ -442,11 +693,13 @@ function itemCardHtml(it){
       '<input type="checkbox" data-select-item="'+it.id+'" '+(selected?'checked':'')+' style="width:auto; margin-left:8px;">' +
     '</div>' +
     '<p style="font-weight:600; margin:8px 0 1px; font-size:13px;">'+esc(it.name)+'</p>' +
+    (it.sku ? '<p class="muted" style="margin:0 0 4px;">SKU '+esc(it.sku)+'</p>' : '') +
     '<p class="muted" style="margin:0 0 6px;">'+esc(it.category)+' \u00B7 '+esc(it.color)+' \u00B7 '+esc(it.size)+' \u00B7 '+esc(catName(it.catalogueId))+'</p>' +
     '<div style="display:flex; align-items:center; justify-content:space-between;">' +
       '<span style="font-weight:600;">'+money(it.price)+'</span>' +
       '<span class="badge '+a.cls+'">'+a.label+'</span>' +
     '</div>' +
+    (canEdit() ? '<div class="stock-ctrl"><button data-stock-dec="'+it.id+'" title="Decrease">\u2212</button><span>'+it.stock+'</span><button data-stock-inc="'+it.id+'" title="Increase">+</button></div>' : '') +
     (canEdit() ? '<div style="display:flex; gap:4px; margin-top:8px;">' +
       '<button class="icon-btn" data-edit-item="'+it.id+'" title="Edit">'+icon('edit',14)+'</button>' +
       '<button class="icon-btn" data-del-item="'+it.id+'" title="Delete">'+icon('trash',14)+'</button>' +
@@ -548,6 +801,7 @@ function shareLinkHtml(s){
       '<p class="muted" style="margin:0;">'+(s.password?'Password protected \u00B7 ':'')+'Viewed '+s.views+' times \u00B7 '+expText+'</p>' +
       itemsLine +
     '</div>' +
+    '<button class="icon-btn" data-open-link="'+s.token+'" title="Open preview">'+icon('search',15)+'</button>' +
     '<button class="icon-btn" data-copy-link="'+s.token+'" title="Copy link">'+icon('copy',15)+'</button>' +
     (canEdit() ? '<button class="icon-btn" data-revoke-link="'+s.id+'" title="Revoke">'+icon('x',15)+'</button>' : '') +
   '</div>';
@@ -598,7 +852,7 @@ function catalogueModal(existing){
       existing.name = name; existing.status = status; existing.updatedAt = Date.now();
       log('Catalogue edited', name);
     } else {
-      state.catalogues.push({id:uid('c'), name:name, status:status, updatedAt:Date.now()});
+      state.catalogues.push({id:uid('c'), name:name, status:status, favorite:false, updatedAt:Date.now()});
       log('Catalogue created', name);
     }
     persist(); closeModal(); render(); toast('Catalogue saved');
@@ -612,6 +866,7 @@ function itemModal(existing){
     '<h2>'+(isEdit?'Edit item':'New item')+'</h2>' +
     '<div class="field"><label>Catalogue</label><select id="m-it-cat">'+catOptions+'</select></div>' +
     '<div class="field"><label>Name</label><input type="text" id="m-it-name" value="'+(isEdit?esc(existing.name):'')+'"></div>' +
+    '<div class="field"><label>SKU</label><input type="text" id="m-it-sku" value="'+(isEdit?esc(existing.sku||''):'')+'"></div>' +
     '<div class="grid grid-4">' +
       '<div class="field"><label>Category</label><input type="text" id="m-it-category" value="'+(isEdit?esc(existing.category):'')+'"></div>' +
       '<div class="field"><label>Colour</label><input type="text" id="m-it-color" value="'+(isEdit?esc(existing.color):'')+'"></div>' +
@@ -626,6 +881,7 @@ function itemModal(existing){
     var data = {
       catalogueId: document.getElementById('m-it-cat').value,
       name: document.getElementById('m-it-name').value.trim(),
+      sku: (document.getElementById('m-it-sku') && document.getElementById('m-it-sku').value.trim()) || '',
       category: document.getElementById('m-it-category').value.trim(),
       color: document.getElementById('m-it-color').value.trim(),
       size: document.getElementById('m-it-size').value.trim(),
@@ -672,6 +928,7 @@ function bindUpload(){
       id: uid('i'),
       catalogueId: document.getElementById('up-cat').value,
       name: name,
+      sku: (document.getElementById('up-sku') && document.getElementById('up-sku').value.trim()) || '',
       category: document.getElementById('up-category').value.trim() || 'Uncategorised',
       color: document.getElementById('up-color').value.trim() || '-',
       size: document.getElementById('up-size').value.trim() || '-',
@@ -705,6 +962,7 @@ function bindUpload(){
         var rows = res.data.map(function(r){
           return {
             name: r.name || r.Name || '',
+            sku: r.sku || r.SKU || '',
             category: r.category || r.Category || 'Uncategorised',
             color: r.color || r.Color || '-',
             size: r.size || r.Size || '-',
@@ -753,7 +1011,7 @@ function bindManage(){
   document.querySelectorAll('[data-dup-cat]').forEach(function(el){
     el.onclick = function(){
       var c = state.catalogues.find(function(x){return x.id===el.getAttribute('data-dup-cat');});
-      var copy = {id:uid('c'), name:c.name+' (copy)', status:'Draft', updatedAt:Date.now()};
+      var copy = {id:uid('c'), name:c.name+' (copy)', status:'Draft', favorite:false, updatedAt:Date.now()};
       state.catalogues.push(copy);
       state.items.filter(function(i){return i.catalogueId===c.id;}).forEach(function(i){
         state.items.push(Object.assign({}, i, {id:uid('i'), catalogueId:copy.id}));
@@ -887,9 +1145,9 @@ function bindShare(){
   };
   document.querySelectorAll('[data-copy-link]').forEach(function(el){
     el.onclick = function(){
-      var url = 'https://cataloguex.app/view/'+el.getAttribute('data-copy-link');
+      var url = shareUrl(el.getAttribute('data-copy-link'));
       if(navigator.clipboard) navigator.clipboard.writeText(url).catch(function(){});
-      toast('Link copied to clipboard');
+      toast('Link copied');
     };
   });
   document.querySelectorAll('[data-revoke-link]').forEach(function(el){
@@ -903,7 +1161,171 @@ function bindShare(){
   });
 }
 
+
+function bindSettings(){
+  var save = document.getElementById('set-save');
+  if (!save) return;
+  save.onclick = function(){
+    state.settings = state.settings || {};
+    state.settings.brandName = document.getElementById('set-brand').value.trim() || 'CatalogueX';
+    state.settings.currency = document.getElementById('set-currency').value;
+    state.settings.lowStockThreshold = Math.max(1, Number(document.getElementById('set-low').value) || 5);
+    var d = document.getElementById('set-share-days').value;
+    state.settings.defaultShareDays = d === '' ? null : Math.max(1, Number(d) || 7);
+    state.theme = document.getElementById('set-theme').value;
+    log('Settings updated', 'Brand ' + state.settings.brandName);
+    persist(); render(); toast('Settings saved');
+  };
+  document.getElementById('set-export').onclick = exportBackup;
+  document.getElementById('set-csv-template').onclick = downloadCsvTemplate;
+  document.getElementById('set-import').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      try {
+        var data = JSON.parse(ev.target.result);
+        state = migrateState(data.state || data);
+        log('Backup imported', file.name);
+        persist(); render(); toast('Backup restored');
+      } catch (err) { toast('Invalid backup file'); }
+    };
+    reader.readAsText(file);
+  });
+  var reset = document.getElementById('set-reset');
+  if (reset) reset.onclick = function(){
+    if (!confirm('Reset to demo data? Your current catalogues and items will be replaced.')) return;
+    state = clone(defaultState);
+    log('Data reset', 'Restored demo dataset');
+    persist(); render(); toast('Demo data restored');
+  };
+}
+function bindCmd(){
+  var input = document.getElementById('cmd-input');
+  var backdrop = document.getElementById('cmd-backdrop');
+  if (backdrop) backdrop.addEventListener('click', function(e){ if (e.target === backdrop) { state.cmdOpen = false; render(); } });
+  if (input) {
+    input.focus();
+    input.addEventListener('input', function(e){
+      state.cmdQuery = e.target.value; render();
+      setTimeout(function(){ var i = document.getElementById('cmd-input'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 0);
+    });
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Escape') { state.cmdOpen = false; render(); }
+      if (e.key === 'Enter') { var first = document.querySelector('.cmd-item[data-cmd]'); if (first) first.click(); }
+    });
+  }
+  document.querySelectorAll('.cmd-item[data-cmd]').forEach(function(el){
+    el.onclick = function(){
+      var id = el.getAttribute('data-cmd');
+      var map = {
+        overview: function(){ state.view = 'overview'; },
+        upload: function(){ state.view = 'upload'; },
+        manage: function(){ state.view = 'manage'; },
+        browse: function(){ state.view = 'browse'; },
+        share: function(){ state.view = 'share'; },
+        settings: function(){ state.view = 'settings'; },
+        theme: function(){ state.theme = state.theme === 'dark' ? 'light' : 'dark'; },
+        export: function(){ exportBackup(); },
+        csv: function(){ downloadCsvTemplate(); },
+        newcat: function(){ if (canEdit()) catalogueModal(null); }
+      };
+      if (map[id]) map[id]();
+      state.cmdOpen = false; persist(); render();
+    };
+  });
+}
+function enhanceExistingBinds(){
+  var _g = bindGlobal, _v = bindView, _u = bindUpload, _m = bindManage, _b = bindBrowse, _s = bindShare;
+  bindGlobal = function(){
+    _g();
+    var tt = document.getElementById('theme-toggle');
+    if (tt) tt.onclick = function(){ state.theme = state.theme === 'dark' ? 'light' : 'dark'; persist(); render(); };
+    var menu = document.getElementById('menu-toggle');
+    if (menu) menu.onclick = function(){ state.sidebarOpen = !state.sidebarOpen; render(); };
+    var sbd = document.getElementById('sidebar-backdrop');
+    if (sbd) sbd.onclick = function(){ state.sidebarOpen = false; render(); };
+    var cmd = document.getElementById('cmd-open');
+    if (cmd) cmd.onclick = function(){ state.cmdOpen = true; state.cmdQuery = ''; render(); };
+    var expb = document.getElementById('export-backup-btn');
+    if (expb) expb.onclick = exportBackup;
+    document.querySelectorAll('[data-nav]').forEach(function(el){
+      el.onclick = function(){
+        state.view = el.getAttribute('data-nav');
+        var alert = el.getAttribute('data-alert');
+        if (alert === 'low') { state.browse.avail = 'Low stock'; state.view = 'browse'; }
+        if (alert === 'out') { state.browse.avail = 'Out of stock'; state.view = 'browse'; }
+        state.sidebarOpen = false;
+        render();
+      };
+    });
+  };
+  bindView = function(){
+    _v();
+    if (state.view === 'settings') bindSettings();
+    if (state.cmdOpen) bindCmd();
+  };
+  bindUpload = function(){
+    _u();
+    var tmpl = document.getElementById('csv-template-btn');
+    if (tmpl) tmpl.onclick = downloadCsvTemplate;
+  };
+  bindManage = function(){
+    _m();
+    var fav = document.getElementById('manage-fav');
+    if (fav) fav.onchange = function(e){ state.manageFavOnly = e.target.checked; render(); };
+    document.querySelectorAll('[data-fav-cat]').forEach(function(el){
+      el.onclick = function(){
+        var c = state.catalogues.find(function(x){ return x.id === el.getAttribute('data-fav-cat'); });
+        if (!c) return; c.favorite = !c.favorite; persist(); render();
+      };
+    });
+  };
+  bindBrowse = function(){
+    _b();
+    document.querySelectorAll('[data-stock-inc]').forEach(function(el){
+      el.onclick = function(){
+        var it = state.items.find(function(x){ return x.id === el.getAttribute('data-stock-inc'); });
+        if (!it) return; it.stock = (Number(it.stock) || 0) + 1;
+        log('Stock updated', it.name + ' -> ' + it.stock); persist(); render();
+      };
+    });
+    document.querySelectorAll('[data-stock-dec]').forEach(function(el){
+      el.onclick = function(){
+        var it = state.items.find(function(x){ return x.id === el.getAttribute('data-stock-dec'); });
+        if (!it) return; it.stock = Math.max(0, (Number(it.stock) || 0) - 1);
+        log('Stock updated', it.name + ' -> ' + it.stock); persist(); render();
+      };
+    });
+  };
+  bindShare = function(){
+    _s();
+    document.querySelectorAll('[data-open-link]').forEach(function(el){
+      el.onclick = function(){ location.hash = '#/view/' + el.getAttribute('data-open-link'); render(); };
+    });
+  };
+}
+document.addEventListener('keydown', function(e){
+  if (!state || parseShareRoute()) return;
+  var tag = (e.target && e.target.tagName || '').toLowerCase();
+  var typing = tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable);
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault(); state.cmdOpen = !state.cmdOpen; state.cmdQuery = ''; render(); return;
+  }
+  if (e.key === 'Escape') {
+    if (state.cmdOpen) { state.cmdOpen = false; render(); return; }
+    if (document.getElementById('modal-backdrop')) { closeModal(); return; }
+  }
+  if (typing) return;
+  if (e.key === '/') { e.preventDefault(); var gs = document.getElementById('global-search'); if (gs) gs.focus(); return; }
+  if (e.key.toLowerCase() === 'd') { state.theme = state.theme === 'dark' ? 'light' : 'dark'; persist(); render(); return; }
+  var map = { '1': 'overview', '2': 'upload', '3': 'manage', '4': 'browse', '5': 'share', '6': 'activity', '7': 'settings' };
+  if (map[e.key]) { state.view = map[e.key]; render(); }
+});
+window.addEventListener('hashchange', function(){ if (state) render(); });
+
 /* ---------- boot ---------- */
+enhanceExistingBinds();
 loadState().then(function(){
   state.selectedItems = state.selectedItems || [];
   render();
