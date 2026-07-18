@@ -1,1 +1,812 @@
-PLACEHOLDER
+
+/* Persistence: localStorage (works on Vercel); Claude window.storage when present */
+(function(){
+  if (window.storage && typeof window.storage.get === 'function') return;
+  window.storage = {
+    get: async function(key) {
+      try {
+        var v = localStorage.getItem(key);
+        return v == null ? null : { value: v };
+      } catch (e) { return null; }
+    },
+    set: async function(key, value) {
+      try { localStorage.setItem(key, value); } catch (e) { console.error(e); }
+    }
+  };
+})();
+
+
+/* ---------- icons (small inline SVGs, no external icon font) ---------- */
+function icon(name, size){
+  size = size || 16;
+  var p = {
+    plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+    share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/>',
+    search:'<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/>',
+    lock:'<rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    upload:'<path d="M12 19V5"/><path d="M6 11l6-6 6 6"/><line x1="4" y1="21" x2="20" y2="21"/>',
+    download:'<path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/><line x1="4" y1="21" x2="20" y2="21"/>',
+    x:'<line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/>',
+    check:'<polyline points="20 6 9 17 4 12"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
+    copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+    hanger:'<path d="M12 4a2 2 0 1 1 2 2"/><path d="M12 6v3"/><path d="M12 9l8 6a2 2 0 0 1-1.2 3.6H5.2A2 2 0 0 1 4 14.6Z"/>',
+    activity:'<polyline points="3 12 8 12 10 18 14 6 16 12 21 12"/>',
+    dashboard:'<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
+    catalog:'<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/>',
+    filter:'<polygon points="22 3 2 3 10 12.5 10 19 14 21 14 12.5 22 3"/>',
+    duplicate:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V4a2 2 0 0 1 2-2h10"/>'
+  };
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+(p[name]||'')+'</svg>';
+}
+
+/* ---------- state ---------- */
+var uid = function(p){ return p+'_'+Math.random().toString(36).slice(2,9); };
+var STORAGE_KEY = 'cataloguex-state-v1';
+
+var defaultState = {
+  role: 'Admin',
+  view: 'overview',
+  catalogues: [
+    {id:'c1', name:'Chamak Winter 2026', status:'Published', updatedAt: Date.now()-1000*60*60*2},
+    {id:'c2', name:'Festive Kurtas', status:'Draft', updatedAt: Date.now()-1000*60*60*26},
+    {id:'c3', name:'Aavritti Essentials', status:'Published', updatedAt: Date.now()-1000*60*60*96}
+  ],
+  items: [
+    {id:'i1', catalogueId:'c1', name:'Navy kurta', category:'Kurtas', color:'Navy', size:'M', price:1299, stock:18, image:''},
+    {id:'i2', catalogueId:'c1', name:'Rust saree', category:'Sarees', color:'Rust', size:'Free', price:3450, stock:4, image:''},
+    {id:'i3', catalogueId:'c2', name:'Ivory co-ord', category:'Co-ord sets', color:'Ivory', size:'S', price:2199, stock:11, image:''},
+    {id:'i4', catalogueId:'c2', name:'Emerald dress', category:'Dresses', color:'Emerald', size:'L', price:2799, stock:0, image:''},
+    {id:'i5', catalogueId:'c3', name:'Navy dress', category:'Dresses', color:'Navy', size:'XL', price:2599, stock:9, image:''},
+    {id:'i6', catalogueId:'c3', name:'Rust kurta', category:'Kurtas', color:'Rust', size:'M', price:1099, stock:22, image:''}
+  ],
+  shareLinks: [
+    {id:'s1', catalogueId:'c3', token:'ax91kd', viewOnly:true, password:false, watermark:true, expiresDays:12, createdAt: Date.now()-1000*60*60*70, views:24},
+    {id:'s2', catalogueId:'c2', token:'m2plqz', viewOnly:true, password:true, watermark:true, expiresDays:null, createdAt: Date.now()-1000*60*60*10, views:3}
+  ],
+  activity: [
+    {ts: Date.now()-1000*60*60*2, role:'Admin', action:'Bulk upload', detail:'Summer_Collection_2026.csv ΓÇö 2 items added to Chamak Winter 2026'},
+    {ts: Date.now()-1000*60*60*10, role:'Editor', action:'Share link created', detail:'Festive Kurtas ΓÇö password protected, no expiry'},
+    {ts: Date.now()-1000*60*60*26, role:'Editor', action:'Item edited', detail:'Emerald dress ΓÇö stock set to 0'}
+  ],
+  browse: {q:'', category:'', color:'', size:'', avail:'', sort:'newest'}
+};
+
+var state = null;
+
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+
+async function loadState(){
+  try{
+    var res = await window.storage.get(STORAGE_KEY, false);
+    if(res && res.value){ state = JSON.parse(res.value); return; }
+  }catch(e){ /* no saved state yet */ }
+  state = clone(defaultState);
+}
+var saveTimer = null;
+function persist(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async function(){
+    try{ await window.storage.set(STORAGE_KEY, JSON.stringify(state), false); }
+    catch(e){ console.error('Could not save', e); }
+  }, 250);
+}
+
+function log(action, detail){
+  state.activity.unshift({ts:Date.now(), role:state.role, action:action, detail:detail});
+  if(state.activity.length>60) state.activity.length = 60;
+}
+
+function toast(msg){
+  var box = document.getElementById('toasts');
+  var el = document.createElement('div');
+  el.className='toast'; el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(function(){ el.remove(); }, 2600);
+}
+
+function canEdit(){ return state.role !== 'Viewer'; }
+function canManage(){ return state.role === 'Admin'; }
+
+function timeAgo(ts){
+  var m = Math.round((Date.now()-ts)/60000);
+  if(m<1) return 'just now';
+  if(m<60) return m+'m ago';
+  var h = Math.round(m/60);
+  if(h<24) return h+'h ago';
+  return Math.round(h/24)+'d ago';
+}
+function money(n){ return '\u20B9' + Number(n).toLocaleString('en-IN'); }
+function statusBadge(s){
+  var cls = s==='Published' ? 'badge-success' : (s==='Draft' ? 'badge-warning' : 'badge-neutral');
+  return '<span class="badge '+cls+'">'+s+'</span>';
+}
+function availOf(stock){
+  if(stock<=0) return {label:'Out of stock', cls:'badge-danger'};
+  if(stock<=5) return {label:'Low stock', cls:'badge-warning'};
+  return {label:'In stock', cls:'badge-success'};
+}
+function catName(id){ var c = state.catalogues.find(function(x){return x.id===id;}); return c? c.name : 'Unknown'; }
+
+/* ---------- render ---------- */
+function render(){
+  var app = document.getElementById('app');
+  app.innerHTML = topbarHtml() + '<div class="layout">' + sidebarHtml() + '<main id="main">' + viewHtml() + '</main></div>';
+  bindGlobal();
+  bindView();
+}
+
+function topbarHtml(){
+  return '' +
+  '<div class="topbar">' +
+    '<div class="brand"><div class="dot"></div>CatalogueX</div>' +
+    '<input id="global-search" type="search" placeholder="Search all catalogues and items" value="'+esc(state.browse.q)+'">' +
+    '<div class="spacer"></div>' +
+    (canEdit() ? '<button class="btn btn-primary" id="new-catalogue-btn">'+icon('plus',15)+' New catalogue</button>' : '') +
+    '<select class="role-select" id="role-select">' +
+      ['Admin','Editor','Viewer'].map(function(r){ return '<option '+(r===state.role?'selected':'')+'>'+r+'</option>'; }).join('') +
+    '</select>' +
+  '</div>';
+}
+
+function sidebarHtml(){
+  var items = [
+    {v:'overview', i:'dashboard', label:'Overview'},
+    {v:'upload', i:'upload', label:'Upload'},
+    {v:'manage', i:'catalog', label:'Catalogues', count: state.catalogues.length},
+    {v:'browse', i:'search', label:'Browse & search', count: state.items.length},
+    {v:'share', i:'share', label:'Share & security', count: state.shareLinks.length},
+    {v:'activity', i:'activity', label:'Activity log'}
+  ];
+  return '<nav class="sidebar">' + items.map(function(it){
+    return '<div class="navitem '+(state.view===it.v?'active':'')+'" data-nav="'+it.v+'">'+icon(it.i,16)+'<span>'+it.label+'</span>' +
+      (it.count!==undefined ? '<span class="count">'+it.count+'</span>' : '') + '</div>';
+  }).join('') + '</nav>';
+}
+
+function viewHtml(){
+  if(!canEdit() && state.view==='upload') return roleLockedHtml('Uploading', 'Switch to Editor or Admin to add items or files.');
+  switch(state.view){
+    case 'overview': return overviewHtml();
+    case 'upload': return uploadHtml();
+    case 'manage': return manageHtml();
+    case 'browse': return browseHtml();
+    case 'share': return shareHtml();
+    case 'activity': return activityHtml();
+    default: return '';
+  }
+}
+
+function roleLockedHtml(title, msg){
+  return '<h1>'+title+'</h1><div class="locked-note">'+icon('lock',13)+' '+msg+'</div>';
+}
+
+function overviewHtml(){
+  var totalItems = state.items.length;
+  var activeLinks = state.shareLinks.length;
+  var lowStock = state.items.filter(function(i){ return i.stock>0 && i.stock<=5; }).length;
+  var outStock = state.items.filter(function(i){ return i.stock<=0; }).length;
+  return '' +
+  '<h1>Overview</h1><p class="subtle">Signed in as '+state.role+'</p>' +
+  '<div class="grid grid-4" style="margin-bottom:20px;">' +
+    metricCard('Catalogues', state.catalogues.length) +
+    metricCard('Total items', totalItems) +
+    metricCard('Active share links', activeLinks) +
+    metricCard('Low / out of stock', lowStock+' / '+outStock) +
+  '</div>' +
+  '<h2 style="font-size:14px; margin:0 0 8px;">Recent activity</h2>' +
+  '<div class="card">' + (state.activity.slice(0,6).map(function(a){
+    return '<div style="display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--border);">' +
+      '<span class="muted" style="min-width:70px;">'+timeAgo(a.ts)+'</span>' +
+      '<span style="flex:1;"><strong>'+a.action+'</strong> ΓÇö '+esc(a.detail)+'</span>' +
+      '<span class="badge badge-neutral">'+a.role+'</span>' +
+    '</div>';
+  }).join('') || '<p class="muted">No activity yet.</p>') + '</div>';
+}
+function metricCard(label,val){
+  return '<div class="card"><p class="metric-label">'+label+'</p><p class="metric-value">'+val+'</p></div>';
+}
+
+function uploadHtml(){
+  var catOptions = state.catalogues.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
+  return '' +
+  '<h1>Upload</h1><p class="subtle">Add a single item, or import many at once from a CSV file.</p>' +
+  '<div class="grid" style="grid-template-columns:1fr 1fr; gap:20px; align-items:start;">' +
+    '<div class="card">' +
+      '<h2 style="font-size:14px; margin:0 0 12px;">Add one item</h2>' +
+      '<div class="field"><label>Catalogue</label><select id="up-cat">'+catOptions+'</select></div>' +
+      '<div class="field"><label>Item name</label><input type="text" id="up-name" placeholder="e.g. Navy kurta"></div>' +
+      '<div class="grid grid-4">' +
+        '<div class="field"><label>Category</label><input type="text" id="up-category" placeholder="Kurtas"></div>' +
+        '<div class="field"><label>Colour</label><input type="text" id="up-color" placeholder="Navy"></div>' +
+        '<div class="field"><label>Size</label><input type="text" id="up-size" placeholder="M"></div>' +
+        '<div class="field"><label>Price (\u20B9)</label><input type="number" id="up-price" placeholder="1299"></div>' +
+      '</div>' +
+      '<div class="field"><label>Stock count</label><input type="number" id="up-stock" placeholder="10"></div>' +
+      '<div class="field"><label>Photo (optional)</label><input type="file" id="up-image" accept="image/*"></div>' +
+      '<button class="btn btn-primary" id="up-submit" style="width:100%; margin-top:6px;">'+icon('plus',14)+' Add item</button>' +
+    '</div>' +
+    '<div class="card">' +
+      '<h2 style="font-size:14px; margin:0 0 12px;">Bulk import (CSV)</h2>' +
+      '<p class="muted" style="margin:0 0 8px;">Columns expected: name, category, color, size, price, stock. First row must be headers.</p>' +
+      '<div class="field"><label>Target catalogue</label><select id="bulk-cat">'+catOptions+'</select></div>' +
+      '<div class="drop" id="drop-zone">' +
+        icon('upload',24) +
+        '<p style="margin:8px 0 2px; font-size:13px;">Drag a CSV file here, or</p>' +
+        '<input type="file" id="bulk-file" accept=".csv" style="max-width:220px; margin:6px auto 0;">' +
+      '</div>' +
+      '<div id="bulk-preview"></div>' +
+    '</div>' +
+  '</div>';
+}
+
+function manageHtml(){
+  var q = (state.manageQuery||'').toLowerCase();
+  var status = state.manageStatus || '';
+  var list = state.catalogues.filter(function(c){
+    if(q && c.name.toLowerCase().indexOf(q)===-1) return false;
+    if(status && c.status!==status) return false;
+    return true;
+  });
+  return '' +
+  '<h1>Catalogues</h1><p class="subtle">'+state.catalogues.length+' catalogues total</p>' +
+  '<div class="toolbar">' +
+    '<input type="search" id="manage-search" placeholder="Search catalogues" style="max-width:240px;" value="'+esc(state.manageQuery||'')+'">' +
+    '<select id="manage-status" style="max-width:150px;">' +
+      '<option value="">All statuses</option>' +
+      '<option '+(status==='Published'?'selected':'')+'>Published</option>' +
+      '<option '+(status==='Draft'?'selected':'')+'>Draft</option>' +
+    '</select>' +
+  '</div>' +
+  '<div class="grid grid-cards">' + (list.map(catalogueCardHtml).join('') || '<p class="empty" style="grid-column:1/-1;">No catalogues match.</p>') + '</div>';
+}
+
+function catalogueCardHtml(c){
+  var itemCount = state.items.filter(function(i){ return i.catalogueId===c.id; }).length;
+  return '<div class="card">' +
+    '<div class="thumb">'+icon('hanger',26)+'</div>' +
+    '<p style="font-weight:600; margin:0 0 2px;">'+esc(c.name)+'</p>' +
+    '<p class="muted" style="margin:0 0 8px;">'+itemCount+' items \u00B7 updated '+timeAgo(c.updatedAt)+'</p>' +
+    '<div style="display:flex; align-items:center; justify-content:space-between;">' +
+      statusBadge(c.status) +
+      '<div>' +
+        '<button class="icon-btn" data-view-cat="'+c.id+'" title="View items">'+icon('search',15)+'</button>' +
+        (canEdit() ? '<button class="icon-btn" data-edit-cat="'+c.id+'" title="Edit">'+icon('edit',15)+'</button>' : '') +
+        (canEdit() ? '<button class="icon-btn" data-dup-cat="'+c.id+'" title="Duplicate">'+icon('duplicate',15)+'</button>' : '') +
+        (canManage() ? '<button class="icon-btn" data-del-cat="'+c.id+'" title="Delete">'+icon('trash',15)+'</button>' : '') +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function browseHtml(){
+  var b = state.browse;
+  var cats = uniq(state.items.map(function(i){return i.category;}));
+  var colors = uniq(state.items.map(function(i){return i.color;}));
+  var sizes = uniq(state.items.map(function(i){return i.size;}));
+  var filtered = filterItems();
+  return '' +
+  '<h1>Browse & search</h1><p class="subtle">Every item across every catalogue, in one searchable view.</p>' +
+  '<div class="toolbar">' +
+    '<input type="search" id="b-q" placeholder="Search by name" style="max-width:220px;" value="'+esc(b.q)+'">' +
+    selectFilter('b-category','Category', cats, b.category) +
+    selectFilter('b-color','Colour', colors, b.color) +
+    selectFilter('b-size','Size', sizes, b.size) +
+    selectFilter('b-avail','Availability', ['In stock','Low stock','Out of stock'], b.avail) +
+    '<select id="b-sort" style="max-width:160px;">' +
+      ['newest','Price: low to high','Price: high to low'].map(function(s){
+        var lbl = s==='newest' ? 'Sort: newest' : s;
+        return '<option value="'+s+'" '+(b.sort===s?'selected':'')+'>'+lbl+'</option>';
+      }).join('') +
+    '</select>' +
+  '</div>' +
+  '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">' +
+    '<span class="muted">'+filtered.length+' item'+(filtered.length===1?'':'s')+'</span>' +
+    (state.selectedItems && state.selectedItems.length ? bulkBarHtml() : '') +
+  '</div>' +
+  '<div class="grid grid-cards">' + (filtered.map(itemCardHtml).join('') || '<p class="empty" style="grid-column:1/-1;">No items match these filters.</p>') + '</div>';
+}
+function selectFilter(id,label,options,val){
+  return '<select id="'+id+'" style="max-width:150px;"><option value="">'+label+': all</option>' +
+    options.map(function(o){ return '<option '+(val===o?'selected':'')+'>'+esc(o)+'</option>'; }).join('') + '</select>';
+}
+function bulkBarHtml(){
+  var n = state.selectedItems.length;
+  return '<span style="display:flex; gap:8px; align-items:center;">' +
+    '<span class="muted">'+n+' selected</span>' +
+    '<button class="btn btn-sm" id="bulk-export">'+icon('download',13)+' Export CSV</button>' +
+    (canEdit() ? '<button class="btn btn-sm btn-danger" id="bulk-delete">'+icon('trash',13)+' Delete</button>' : '') +
+  '</span>';
+}
+function filterItems(){
+  var b = state.browse;
+  var q = b.q.toLowerCase();
+  var res = state.items.filter(function(i){
+    if(q && i.name.toLowerCase().indexOf(q)===-1) return false;
+    if(b.category && i.category!==b.category) return false;
+    if(b.color && i.color!==b.color) return false;
+    if(b.size && i.size!==b.size) return false;
+    if(b.avail){ var a = availOf(i.stock).label; if(a!==b.avail) return false; }
+    return true;
+  });
+  if(b.sort==='Price: low to high') res.sort(function(a,c){return a.price-c.price;});
+  if(b.sort==='Price: high to low') res.sort(function(a,c){return c.price-a.price;});
+  return res;
+}
+function itemCardHtml(it){
+  var a = availOf(it.stock);
+  var selected = state.selectedItems && state.selectedItems.indexOf(it.id)>-1;
+  return '<div class="card sel-item '+(selected?'selected':'')+'" data-item-card="'+it.id+'">' +
+    '<div style="display:flex; justify-content:space-between; align-items:flex-start;">' +
+      '<div class="thumb" style="flex:1; height:70px;">' + (it.image ? '<img src="'+it.image+'">' : icon('hanger',22)) + '</div>' +
+      '<input type="checkbox" data-select-item="'+it.id+'" '+(selected?'checked':'')+' style="width:auto; margin-left:8px;">' +
+    '</div>' +
+    '<p style="font-weight:600; margin:8px 0 1px; font-size:13px;">'+esc(it.name)+'</p>' +
+    '<p class="muted" style="margin:0 0 6px;">'+esc(it.category)+' \u00B7 '+esc(it.color)+' \u00B7 '+esc(it.size)+' \u00B7 '+esc(catName(it.catalogueId))+'</p>' +
+    '<div style="display:flex; align-items:center; justify-content:space-between;">' +
+      '<span style="font-weight:600;">'+money(it.price)+'</span>' +
+      '<span class="badge '+a.cls+'">'+a.label+'</span>' +
+    '</div>' +
+    (canEdit() ? '<div style="display:flex; gap:4px; margin-top:8px;">' +
+      '<button class="icon-btn" data-edit-item="'+it.id+'" title="Edit">'+icon('edit',14)+'</button>' +
+      '<button class="icon-btn" data-del-item="'+it.id+'" title="Delete">'+icon('trash',14)+'</button>' +
+    '</div>' : '') +
+  '</div>';
+}
+
+function shareHtml(){
+  var catOptions = state.catalogues.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
+  var mode = state.shareMode || 'catalogue';
+  return '' +
+  '<h1>Share & security</h1><p class="subtle">Share a whole catalogue, or hand-pick individual designs to send.</p>' +
+  '<div class="grid" style="grid-template-columns:1fr 1.2fr; gap:20px; align-items:start;">' +
+    (canEdit() ? '<div class="card">' +
+      '<h2 style="font-size:14px; margin:0 0 12px;">Create share link</h2>' +
+      '<div style="display:flex; gap:0; border:1px solid var(--border-strong); border-radius:var(--radius); overflow:hidden; margin-bottom:14px;">' +
+        '<button id="sh-mode-catalogue" style="flex:1; border:none; padding:7px; '+(mode==='catalogue'?'background:var(--accent); color:#fff;':'background:#fff; color:var(--text-2);')+'">Whole catalogue</button>' +
+        '<button id="sh-mode-selection" style="flex:1; border:none; padding:7px; '+(mode==='selection'?'background:var(--accent); color:#fff;':'background:#fff; color:var(--text-2);')+'">Selected designs</button>' +
+      '</div>' +
+      (mode==='catalogue' ?
+        '<div class="field"><label>Catalogue</label><select id="sh-cat">'+catOptions+'</select></div>'
+        : designPickerHtml()) +
+      checkboxRow('sh-viewonly', icon('search',14)+' View-only (no download)', true) +
+      checkboxRow('sh-password', icon('lock',14)+' Password protect', false) +
+      checkboxRow('sh-watermark', icon('hanger',14)+' Watermark images', true) +
+      '<div class="checkbox-row"><span>'+icon('clock',14)+' Link expires in</span>' +
+        '<select id="sh-expiry" style="width:120px;"><option value="7">7 days</option><option value="30">30 days</option><option value="">Never</option></select></div>' +
+      '<button class="btn btn-primary" id="sh-generate" style="width:100%; margin-top:10px;">'+icon('share',14)+' Generate link</button>' +
+    '</div>' : '<div class="card">' + roleLockedHtml('','Viewers can browse existing share links but cannot create new ones.') + '</div>') +
+    '<div>' +
+      '<h2 style="font-size:14px; margin:0 0 8px;">Active links ('+state.shareLinks.length+')</h2>' +
+      (state.shareLinks.map(shareLinkHtml).join('') || '<p class="empty">No share links yet.</p>') +
+    '</div>' +
+  '</div>';
+}
+function checkboxRow(id,label,checked){
+  return '<div class="checkbox-row"><span>'+label+'</span><input type="checkbox" id="'+id+'" '+(checked?'checked':'')+' style="width:auto;"></div>';
+}
+
+function designPickerHtml(){
+  var sel = state.shareSelectedItems || [];
+  var q = (state.shareSelSearch||'').toLowerCase();
+  var cat = state.shareSelCategory || '';
+  var cats = uniq(state.items.map(function(i){return i.category;}));
+  var matches = state.items.filter(function(i){
+    if(q && i.name.toLowerCase().indexOf(q)===-1) return false;
+    if(cat && i.category!==cat) return false;
+    return true;
+  });
+  var selectedObjs = state.items.filter(function(i){ return sel.indexOf(i.id)>-1; });
+  return '' +
+  '<div class="field"><label>Selection name (optional, shown to the recipient)</label>' +
+    '<input type="text" id="sh-sel-name" placeholder="e.g. For Priya ΓÇö wholesale enquiry" value="'+esc(state.shareSelName||'')+'"></div>' +
+  '<div class="field">' +
+    '<label>Find designs to add</label>' +
+    '<div style="display:flex; gap:6px;">' +
+      '<input type="search" id="sh-sel-search" placeholder="Search by name" value="'+esc(state.shareSelSearch||'')+'" style="flex:1;">' +
+      '<select id="sh-sel-category" style="width:130px;"><option value="">All categories</option>' +
+        cats.map(function(c){ return '<option '+(cat===c?'selected':'')+'>'+esc(c)+'</option>'; }).join('') +
+      '</select>' +
+    '</div>' +
+  '</div>' +
+  '<div style="max-height:170px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:10px;">' +
+    (matches.length ? matches.map(function(i){
+      var checked = sel.indexOf(i.id)>-1;
+      return '<label style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-bottom:1px solid var(--border); cursor:pointer; font-size:12.5px;">' +
+        '<input type="checkbox" data-pick-item="'+i.id+'" '+(checked?'checked':'')+' style="width:auto;">' +
+        '<span style="flex:1;">'+esc(i.name)+'</span>' +
+        '<span class="muted">'+esc(catName(i.catalogueId))+'</span>' +
+        '<span>'+money(i.price)+'</span>' +
+      '</label>';
+    }).join('') : '<p class="empty" style="padding:14px;">No designs match.</p>') +
+  '</div>' +
+  '<div style="margin-bottom:8px;">' +
+    '<p class="muted" style="margin:0 0 6px;">'+sel.length+' design'+(sel.length===1?'':'s')+' selected</p>' +
+    '<div style="display:flex; flex-wrap:wrap; gap:6px;">' +
+      selectedObjs.map(function(i){
+        return '<span class="badge badge-neutral" style="display:inline-flex; align-items:center; gap:6px;">'+esc(i.name)+
+          '<span data-unpick-item="'+i.id+'" style="cursor:pointer;">'+icon('x',10)+'</span></span>';
+      }).join('') +
+    '</div>' +
+  '</div>';
+}
+
+function shareLinkHtml(s){
+  var expText = s.expiresDays ? 'expires in ' + daysLeft(s) + ' days' : 'no expiry';
+  var titleLine, itemsLine = '';
+  if(s.type==='selection'){
+    var names = (s.itemIds||[]).map(function(id){ var it = state.items.find(function(x){return x.id===id;}); return it? it.name : null; }).filter(Boolean);
+    titleLine = esc(s.label || ('Custom selection \u00B7 '+names.length+' designs'));
+    itemsLine = '<p class="muted" style="margin:2px 0 0;">'+esc(names.slice(0,3).join(', '))+(names.length>3 ? ' +'+(names.length-3)+' more' : '')+'</p>';
+  } else {
+    titleLine = esc(catName(s.catalogueId));
+  }
+  return '<div class="link-row" style="align-items:flex-start;">' +
+    icon(s.type==='selection' ? 'search' : 'hanger',16) +
+    '<div style="flex:1;">' +
+      '<p style="margin:0; font-weight:500;">'+titleLine+'</p>' +
+      '<p class="muted" style="margin:0;">'+(s.password?'Password protected \u00B7 ':'')+'Viewed '+s.views+' times \u00B7 '+expText+'</p>' +
+      itemsLine +
+    '</div>' +
+    '<button class="icon-btn" data-copy-link="'+s.token+'" title="Copy link">'+icon('copy',15)+'</button>' +
+    (canEdit() ? '<button class="icon-btn" data-revoke-link="'+s.id+'" title="Revoke">'+icon('x',15)+'</button>' : '') +
+  '</div>';
+}
+function daysLeft(s){
+  var elapsedDays = (Date.now()-s.createdAt)/86400000;
+  return Math.max(0, Math.round(s.expiresDays - elapsedDays));
+}
+
+function activityHtml(){
+  return '<h1>Activity log</h1><p class="subtle">Every upload, edit, share and deletion, kept for audit purposes.</p>' +
+  '<div class="card"><table><thead><tr><th>Time</th><th>Role</th><th>Action</th><th>Detail</th></tr></thead><tbody>' +
+    (state.activity.map(function(a){
+      return '<tr><td class="muted">'+timeAgo(a.ts)+'</td><td>'+a.role+'</td><td>'+a.action+'</td><td>'+esc(a.detail)+'</td></tr>';
+    }).join('') || '<tr><td colspan="4" class="empty">No activity recorded yet.</td></tr>') +
+  '</tbody></table></div>';
+}
+
+function uniq(arr){ return arr.filter(function(v,i){ return arr.indexOf(v)===i; }); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+/* ---------- modals ---------- */
+function openModal(html){
+  var wrap = document.createElement('div');
+  wrap.className='modal-backdrop'; wrap.id='modal-backdrop';
+  wrap.innerHTML = '<div class="modal">'+html+'</div>';
+  wrap.addEventListener('click', function(e){ if(e.target===wrap) closeModal(); });
+  document.body.appendChild(wrap);
+}
+function closeModal(){ var m = document.getElementById('modal-backdrop'); if(m) m.remove(); }
+
+function catalogueModal(existing){
+  var isEdit = !!existing;
+  openModal(
+    '<h2>'+(isEdit?'Edit catalogue':'New catalogue')+'</h2>' +
+    '<div class="field"><label>Name</label><input type="text" id="m-cat-name" value="'+(isEdit?esc(existing.name):'')+'"></div>' +
+    '<div class="field"><label>Status</label><select id="m-cat-status">' +
+      ['Draft','Published'].map(function(s){ return '<option '+(isEdit && existing.status===s?'selected':'')+'>'+s+'</option>'; }).join('') +
+    '</select></div>' +
+    '<div class="modal-actions"><button class="btn" id="m-cancel">Cancel</button><button class="btn btn-primary" id="m-save">Save</button></div>'
+  );
+  document.getElementById('m-cancel').onclick = closeModal;
+  document.getElementById('m-save').onclick = function(){
+    var name = document.getElementById('m-cat-name').value.trim();
+    var status = document.getElementById('m-cat-status').value;
+    if(!name){ toast('Give the catalogue a name'); return; }
+    if(isEdit){
+      existing.name = name; existing.status = status; existing.updatedAt = Date.now();
+      log('Catalogue edited', name);
+    } else {
+      state.catalogues.push({id:uid('c'), name:name, status:status, updatedAt:Date.now()});
+      log('Catalogue created', name);
+    }
+    persist(); closeModal(); render(); toast('Catalogue saved');
+  };
+}
+
+function itemModal(existing){
+  var isEdit = !!existing;
+  var catOptions = state.catalogues.map(function(c){ return '<option value="'+c.id+'" '+(isEdit&&existing.catalogueId===c.id?'selected':'')+'>'+esc(c.name)+'</option>'; }).join('');
+  openModal(
+    '<h2>'+(isEdit?'Edit item':'New item')+'</h2>' +
+    '<div class="field"><label>Catalogue</label><select id="m-it-cat">'+catOptions+'</select></div>' +
+    '<div class="field"><label>Name</label><input type="text" id="m-it-name" value="'+(isEdit?esc(existing.name):'')+'"></div>' +
+    '<div class="grid grid-4">' +
+      '<div class="field"><label>Category</label><input type="text" id="m-it-category" value="'+(isEdit?esc(existing.category):'')+'"></div>' +
+      '<div class="field"><label>Colour</label><input type="text" id="m-it-color" value="'+(isEdit?esc(existing.color):'')+'"></div>' +
+      '<div class="field"><label>Size</label><input type="text" id="m-it-size" value="'+(isEdit?esc(existing.size):'')+'"></div>' +
+      '<div class="field"><label>Price</label><input type="number" id="m-it-price" value="'+(isEdit?existing.price:'')+'"></div>' +
+    '</div>' +
+    '<div class="field"><label>Stock</label><input type="number" id="m-it-stock" value="'+(isEdit?existing.stock:'')+'"></div>' +
+    '<div class="modal-actions"><button class="btn" id="m-cancel">Cancel</button><button class="btn btn-primary" id="m-save">Save</button></div>'
+  );
+  document.getElementById('m-cancel').onclick = closeModal;
+  document.getElementById('m-save').onclick = function(){
+    var data = {
+      catalogueId: document.getElementById('m-it-cat').value,
+      name: document.getElementById('m-it-name').value.trim(),
+      category: document.getElementById('m-it-category').value.trim(),
+      color: document.getElementById('m-it-color').value.trim(),
+      size: document.getElementById('m-it-size').value.trim(),
+      price: Number(document.getElementById('m-it-price').value)||0,
+      stock: Number(document.getElementById('m-it-stock').value)||0
+    };
+    if(!data.name){ toast('Give the item a name'); return; }
+    if(isEdit){ Object.assign(existing, data); log('Item edited', data.name); }
+    else { state.items.push(Object.assign({id:uid('i'), image:''}, data)); log('Item added', data.name); }
+    persist(); closeModal(); render(); toast('Item saved');
+  };
+}
+
+/* ---------- events ---------- */
+function bindGlobal(){
+  document.getElementById('global-search').addEventListener('input', function(e){
+    state.browse.q = e.target.value; state.view='browse'; render();
+    document.getElementById('global-search').focus();
+    var v = document.getElementById('global-search'); v.value = state.browse.q; v.setSelectionRange(v.value.length,v.value.length);
+  });
+  document.getElementById('role-select').addEventListener('change', function(e){
+    state.role = e.target.value; persist(); render();
+  });
+  var nb = document.getElementById('new-catalogue-btn');
+  if(nb) nb.onclick = function(){ catalogueModal(null); };
+
+  document.querySelectorAll('[data-nav]').forEach(function(el){
+    el.addEventListener('click', function(){ state.view = el.getAttribute('data-nav'); render(); });
+  });
+}
+
+function bindView(){
+  if(state.view==='upload' && canEdit()) bindUpload();
+  if(state.view==='manage') bindManage();
+  if(state.view==='browse') bindBrowse();
+  if(state.view==='share') bindShare();
+}
+
+function bindUpload(){
+  document.getElementById('up-submit').onclick = function(){
+    var name = document.getElementById('up-name').value.trim();
+    if(!name){ toast('Enter an item name'); return; }
+    var item = {
+      id: uid('i'),
+      catalogueId: document.getElementById('up-cat').value,
+      name: name,
+      category: document.getElementById('up-category').value.trim() || 'Uncategorised',
+      color: document.getElementById('up-color').value.trim() || '-',
+      size: document.getElementById('up-size').value.trim() || '-',
+      price: Number(document.getElementById('up-price').value)||0,
+      stock: Number(document.getElementById('up-stock').value)||0,
+      image: ''
+    };
+    var fileInput = document.getElementById('up-image');
+    var finish = function(){
+      state.items.push(item);
+      var c = state.catalogues.find(function(x){return x.id===item.catalogueId;});
+      if(c) c.updatedAt = Date.now();
+      log('Item added', item.name + ' \u2192 ' + catName(item.catalogueId));
+      persist(); render(); toast('Item added');
+    };
+    if(fileInput.files && fileInput.files[0]){
+      var reader = new FileReader();
+      reader.onload = function(ev){ item.image = ev.target.result; finish(); };
+      reader.readAsDataURL(fileInput.files[0]);
+    } else { finish(); }
+  };
+
+  var dropZone = document.getElementById('drop-zone');
+  var fileInput = document.getElementById('bulk-file');
+  var pending = null;
+
+  function handleCsv(file){
+    Papa.parse(file, {
+      header:true, skipEmptyLines:true,
+      complete: function(res){
+        var rows = res.data.map(function(r){
+          return {
+            name: r.name || r.Name || '',
+            category: r.category || r.Category || 'Uncategorised',
+            color: r.color || r.Color || '-',
+            size: r.size || r.Size || '-',
+            price: Number(r.price || r.Price || 0),
+            stock: Number(r.stock || r.Stock || 0)
+          };
+        }).filter(function(r){ return r.name; });
+        pending = rows;
+        document.getElementById('bulk-preview').innerHTML =
+          '<p class="muted" style="margin:10px 0 6px;">'+rows.length+' rows parsed. Review then confirm.</p>' +
+          '<table style="margin-bottom:10px;"><thead><tr><th>Name</th><th>Category</th><th>Price</th><th>Stock</th></tr></thead><tbody>' +
+          rows.slice(0,5).map(function(r){ return '<tr><td>'+esc(r.name)+'</td><td>'+esc(r.category)+'</td><td>'+money(r.price)+'</td><td>'+r.stock+'</td></tr>'; }).join('') +
+          '</tbody></table>' +
+          (rows.length>5 ? '<p class="muted">+ '+(rows.length-5)+' more rows</p>' : '') +
+          '<button class="btn btn-primary" id="bulk-confirm" style="width:100%;">'+icon('check',14)+' Import '+rows.length+' items</button>';
+        document.getElementById('bulk-confirm').onclick = function(){
+          var catId = document.getElementById('bulk-cat').value;
+          rows.forEach(function(r){ state.items.push(Object.assign({id:uid('i'), catalogueId:catId, image:''}, r)); });
+          var c = state.catalogues.find(function(x){return x.id===catId;});
+          if(c) c.updatedAt = Date.now();
+          log('Bulk upload', file.name + ' ΓÇö ' + rows.length + ' items added to ' + catName(catId));
+          persist(); render(); toast(rows.length+' items imported');
+        };
+      },
+      error: function(){ toast('Could not read that CSV file'); }
+    });
+  }
+  fileInput.addEventListener('change', function(){ if(fileInput.files[0]) handleCsv(fileInput.files[0]); });
+  dropZone.addEventListener('dragover', function(e){ e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', function(){ dropZone.classList.remove('drag'); });
+  dropZone.addEventListener('drop', function(e){
+    e.preventDefault(); dropZone.classList.remove('drag');
+    if(e.dataTransfer.files[0]) handleCsv(e.dataTransfer.files[0]);
+  });
+}
+
+function bindManage(){
+  document.getElementById('manage-search').addEventListener('input', function(e){ state.manageQuery = e.target.value; render(); document.getElementById('manage-search').focus(); var v=document.getElementById('manage-search'); v.setSelectionRange(v.value.length,v.value.length); });
+  document.getElementById('manage-status').addEventListener('change', function(e){ state.manageStatus = e.target.value; render(); });
+  document.querySelectorAll('[data-view-cat]').forEach(function(el){
+    el.onclick = function(){ state.view='browse'; state.browse.q=''; state.browseCatFilter = el.getAttribute('data-view-cat'); render(); };
+  });
+  document.querySelectorAll('[data-edit-cat]').forEach(function(el){
+    el.onclick = function(){ catalogueModal(state.catalogues.find(function(c){return c.id===el.getAttribute('data-edit-cat');})); };
+  });
+  document.querySelectorAll('[data-dup-cat]').forEach(function(el){
+    el.onclick = function(){
+      var c = state.catalogues.find(function(x){return x.id===el.getAttribute('data-dup-cat');});
+      var copy = {id:uid('c'), name:c.name+' (copy)', status:'Draft', updatedAt:Date.now()};
+      state.catalogues.push(copy);
+      state.items.filter(function(i){return i.catalogueId===c.id;}).forEach(function(i){
+        state.items.push(Object.assign({}, i, {id:uid('i'), catalogueId:copy.id}));
+      });
+      log('Catalogue duplicated', c.name);
+      persist(); render(); toast('Catalogue duplicated');
+    };
+  });
+  document.querySelectorAll('[data-del-cat]').forEach(function(el){
+    el.onclick = function(){
+      var id = el.getAttribute('data-del-cat'); var c = state.catalogues.find(function(x){return x.id===id;});
+      if(!confirm('Delete "'+c.name+'" and all its items? This cannot be undone.')) return;
+      state.catalogues = state.catalogues.filter(function(x){return x.id!==id;});
+      state.items = state.items.filter(function(x){return x.catalogueId!==id;});
+      state.shareLinks = state.shareLinks.filter(function(x){return x.catalogueId!==id;});
+      log('Catalogue deleted', c.name);
+      persist(); render(); toast('Catalogue deleted');
+    };
+  });
+}
+
+function bindBrowse(){
+  ['q','category','color','size','avail','sort'].forEach(function(key){
+    var el = document.getElementById('b-'+key);
+    el.addEventListener(key==='q'?'input':'change', function(e){
+      state.browse[key] = e.target.value; render();
+      if(key==='q'){ var v=document.getElementById('b-q'); v.focus(); v.setSelectionRange(v.value.length,v.value.length); }
+    });
+  });
+  state.selectedItems = state.selectedItems || [];
+  document.querySelectorAll('[data-select-item]').forEach(function(el){
+    el.addEventListener('change', function(){
+      var id = el.getAttribute('data-select-item');
+      var idx = state.selectedItems.indexOf(id);
+      if(idx>-1) state.selectedItems.splice(idx,1); else state.selectedItems.push(id);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-edit-item]').forEach(function(el){
+    el.onclick = function(){ itemModal(state.items.find(function(i){return i.id===el.getAttribute('data-edit-item');})); };
+  });
+  document.querySelectorAll('[data-del-item]').forEach(function(el){
+    el.onclick = function(){
+      var id = el.getAttribute('data-del-item'); var it = state.items.find(function(x){return x.id===id;});
+      if(!confirm('Delete "'+it.name+'"?')) return;
+      state.items = state.items.filter(function(x){return x.id!==id;});
+      log('Item deleted', it.name);
+      persist(); render(); toast('Item deleted');
+    };
+  });
+  var exp = document.getElementById('bulk-export');
+  if(exp) exp.onclick = function(){
+    var rows = state.items.filter(function(i){return state.selectedItems.indexOf(i.id)>-1;});
+    var csv = 'name,category,color,size,price,stock\n' + rows.map(function(r){ return [r.name,r.category,r.color,r.size,r.price,r.stock].join(','); }).join('\n');
+    var blob = new Blob([csv], {type:'text/csv'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'catalogue-export.csv'; a.click();
+    log('Items exported', rows.length + ' items to CSV');
+    persist();
+  };
+  var del = document.getElementById('bulk-delete');
+  if(del) del.onclick = function(){
+    if(!confirm('Delete '+state.selectedItems.length+' selected items?')) return;
+    state.items = state.items.filter(function(i){ return state.selectedItems.indexOf(i.id)===-1; });
+    log('Bulk delete', state.selectedItems.length + ' items removed');
+    state.selectedItems = [];
+    persist(); render(); toast('Items deleted');
+  };
+}
+
+function bindShare(){
+  state.shareMode = state.shareMode || 'catalogue';
+  state.shareSelectedItems = state.shareSelectedItems || [];
+
+  var modeCat = document.getElementById('sh-mode-catalogue');
+  var modeSel = document.getElementById('sh-mode-selection');
+  if(modeCat) modeCat.onclick = function(){ state.shareMode='catalogue'; render(); };
+  if(modeSel) modeSel.onclick = function(){ state.shareMode='selection'; render(); };
+
+  if(state.shareMode==='selection'){
+    var nameInput = document.getElementById('sh-sel-name');
+    if(nameInput) nameInput.addEventListener('input', function(e){ state.shareSelName = e.target.value; });
+    var searchInput = document.getElementById('sh-sel-search');
+    if(searchInput) searchInput.addEventListener('input', function(e){
+      state.shareSelSearch = e.target.value; render();
+      var v = document.getElementById('sh-sel-search'); if(v){ v.focus(); v.setSelectionRange(v.value.length,v.value.length); }
+    });
+    var catFilter = document.getElementById('sh-sel-category');
+    if(catFilter) catFilter.addEventListener('change', function(e){ state.shareSelCategory = e.target.value; render(); });
+    document.querySelectorAll('[data-pick-item]').forEach(function(el){
+      el.addEventListener('change', function(){
+        var id = el.getAttribute('data-pick-item');
+        var idx = state.shareSelectedItems.indexOf(id);
+        if(idx>-1) state.shareSelectedItems.splice(idx,1); else state.shareSelectedItems.push(id);
+        render();
+      });
+    });
+    document.querySelectorAll('[data-unpick-item]').forEach(function(el){
+      el.onclick = function(){
+        var id = el.getAttribute('data-unpick-item');
+        state.shareSelectedItems = state.shareSelectedItems.filter(function(x){return x!==id;});
+        render();
+      };
+    });
+  }
+
+  var gen = document.getElementById('sh-generate');
+  if(gen) gen.onclick = function(){
+    var expVal = document.getElementById('sh-expiry').value;
+    var base = {
+      id: uid('s'), token: Math.random().toString(36).slice(2,8),
+      viewOnly: document.getElementById('sh-viewonly').checked,
+      password: document.getElementById('sh-password').checked,
+      watermark: document.getElementById('sh-watermark').checked,
+      expiresDays: expVal ? Number(expVal) : null,
+      createdAt: Date.now(), views:0
+    };
+    var link, logDetail;
+    if(state.shareMode==='selection'){
+      if(!state.shareSelectedItems.length){ toast('Select at least one design first'); return; }
+      link = Object.assign(base, {type:'selection', itemIds: state.shareSelectedItems.slice(), label: (state.shareSelName||'').trim() || null});
+      logDetail = state.shareSelectedItems.length + ' hand-picked designs' + (base.password ? ' ΓÇö password protected' : '');
+      state.shareSelectedItems = []; state.shareSelName = ''; state.shareSelSearch = '';
+    } else {
+      var catId = document.getElementById('sh-cat').value;
+      link = Object.assign(base, {type:'catalogue', catalogueId: catId});
+      logDetail = catName(catId) + (base.password ? ' ΓÇö password protected' : '');
+    }
+    state.shareLinks.unshift(link);
+    log('Share link created', logDetail);
+    persist(); render(); toast('Share link created');
+  };
+  document.querySelectorAll('[data-copy-link]').forEach(function(el){
+    el.onclick = function(){
+      var url = 'https://cataloguex.app/view/'+el.getAttribute('data-copy-link');
+      if(navigator.clipboard) navigator.clipboard.writeText(url).catch(function(){});
+      toast('Link copied to clipboard');
+    };
+  });
+  document.querySelectorAll('[data-revoke-link]').forEach(function(el){
+    el.onclick = function(){
+      var id = el.getAttribute('data-revoke-link');
+      var s = state.shareLinks.find(function(x){return x.id===id;});
+      state.shareLinks = state.shareLinks.filter(function(x){return x.id!==id;});
+      log('Share link revoked', catName(s.catalogueId));
+      persist(); render(); toast('Link revoked');
+    };
+  });
+}
+
+/* ---------- boot ---------- */
+loadState().then(function(){
+  state.selectedItems = state.selectedItems || [];
+  render();
+});
