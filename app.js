@@ -1825,20 +1825,37 @@ function bindWorkspaceBrand() {
   saveField('ws-brand', 'brandName', 'Brand name');
 }
 
+function getAdminCredentials() {
+  var p = (state && state.profile) || {};
+  return {
+    email: String(p.email || 'admin@cataloguex.app').trim(),
+    password: String(p.password != null ? p.password : 'demo'),
+    name: String(p.name || 'Admin').trim() || 'Admin',
+  };
+}
+function normalizeLoginId(v) {
+  return String(v || '')
+    .trim()
+    .toLowerCase();
+}
 function portalHtml() {
+  var creds = getAdminCredentials();
   return (
     '<div class="portal"><div class="portal-card">' +
     '<div class="portal-brand"><div class="mark">C</div><div><h1>CatalogueX</h1><p>Admin portal</p></div></div>' +
-    '<p style="margin:0 0 1rem;color:var(--text-2);font-size:var(--fs-sm)">Sign in as admin to manage products, shares, and settings.</p>' +
-    '<div class="field"><label>Email</label><input type="email" id="adm-email" placeholder="admin@cataloguex.app" value="admin@cataloguex.app"></div>' +
-    '<div class="field"><label>Password</label><input type="password" id="adm-pass" placeholder="demo (any password for now)" value="demo"></div>' +
+    '<p style="margin:0 0 1rem;color:var(--text-2);font-size:var(--fs-sm)">Sign in with your admin login ID and password from Settings · Admin profile.</p>' +
+    '<div class="field"><label>Login ID / Email</label><input type="email" id="adm-email" autocomplete="username" placeholder="Your admin email" value="' +
+    esc(creds.email) +
+    '"></div>' +
+    '<div class="field"><label>Password</label><input type="password" id="adm-pass" autocomplete="current-password" placeholder="Your admin password" value=""></div>' +
+    '<p id="adm-login-error" class="portal-login-error" style="display:none" role="alert"></p>' +
     '<button class="btn btn-primary btn-block" id="enter-admin" style="padding:.85rem">' +
     icon('lock', 16) +
     ' Sign in as admin</button>' +
     '<div style="margin-top:1.15rem">' +
     themeToggleHtml() +
     '</div>' +
-    '<p class="portal-note">Local demo · data stays in this browser · share links work via URL hash</p>' +
+    '<p class="portal-note">Credentials are stored in this browser. Change them anytime in Settings · Admin profile after login.</p>' +
     '</div></div>'
   );
 }
@@ -1846,17 +1863,56 @@ function portalHtml() {
 function bindPortal() {
   bindThemeControls();
   var a = document.getElementById('enter-admin');
-  if (a)
-    a.onclick = function () {
-      var email = (document.getElementById('adm-email').value || '').trim() || 'admin@cataloguex.app';
-      var name = (state.profile && state.profile.name) || 'Admin';
-      state.session = { role: 'admin', name: name, email: email, portalLabel: name };
-      state.view = 'product';
-      log('Signed in', 'Admin · ' + email);
+  var errEl = document.getElementById('adm-login-error');
+  function showLoginError(msg) {
+    if (!errEl) {
+      toast(msg);
+      return;
+    }
+    errEl.textContent = msg;
+    errEl.style.display = msg ? 'block' : 'none';
+  }
+  function tryLogin() {
+    var creds = getAdminCredentials();
+    var email = (document.getElementById('adm-email') && document.getElementById('adm-email').value) || '';
+    var pass = (document.getElementById('adm-pass') && document.getElementById('adm-pass').value) || '';
+    email = String(email).trim();
+    pass = String(pass);
+    if (!email || !pass) {
+      showLoginError('Enter login ID and password.');
+      return;
+    }
+    if (normalizeLoginId(email) !== normalizeLoginId(creds.email) || pass !== creds.password) {
+      showLoginError('Invalid login ID or password.');
+      log('Sign-in failed', 'Admin · wrong credentials for ' + email);
       persist();
-      render();
-      toast('Welcome, Admin');
+      return;
+    }
+    showLoginError('');
+    var name = creds.name || 'Admin';
+    state.session = {
+      role: 'admin',
+      name: name,
+      email: creds.email,
+      portalLabel: name,
     };
+    state.view = 'product';
+    log('Signed in', 'Admin · ' + creds.email);
+    persist();
+    render();
+    toast('Welcome, ' + name);
+  }
+  if (a) a.onclick = tryLogin;
+  var passInput = document.getElementById('adm-pass');
+  var emailInput = document.getElementById('adm-email');
+  function onEnter(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      tryLogin();
+    }
+  }
+  if (passInput) passInput.onkeydown = onEnter;
+  if (emailInput) emailInput.onkeydown = onEnter;
 }
 
 function sessionPortalLabel() {
@@ -2670,19 +2726,20 @@ function settingsHtml() {
 
   var adminBody =
     '<div class="settings-stack">' +
+    '<p class="settings-gs-intro">Login ID and password below are used on the sign-in screen. Save to apply immediately.</p>' +
     '<div class="field"><label>Name</label><input type="text" id="pf-name" value="' +
     esc(p.name || '') +
-    '"></div>' +
-    '<div class="field"><label>Email</label><input type="email" id="pf-email" value="' +
+    '" placeholder="Display name"></div>' +
+    '<div class="field"><label>Login ID / Email</label><input type="email" id="pf-email" value="' +
     esc(p.email || '') +
-    '"></div>' +
+    '" placeholder="Used to sign in" autocomplete="username"></div>' +
     '<div class="field"><label>Phone number</label><input type="text" id="pf-phone" value="' +
     esc(p.phone || '') +
     '" placeholder="Phone"></div>' +
     '<div class="field"><label>Password</label><input type="password" id="pf-password" value="' +
     esc(p.password || '') +
-    '" placeholder="Password" autocomplete="new-password"></div>' +
-    '<button type="button" class="btn btn-primary btn-sm" id="pf-save">Save changes</button></div>';
+    '" placeholder="Used to sign in" autocomplete="new-password"></div>' +
+    '<button type="button" class="btn btn-primary btn-sm" id="pf-save">Save login credentials</button></div>';
 
   var bizBody =
     '<div class="settings-stack">' +
@@ -3944,25 +4001,49 @@ function bindSettings() {
       toast('Display options saved');
     };
 
-  // 1 admin profile
+  // 1 admin profile — login ID + password used on the portal gate
   var pfSave = document.getElementById('pf-save');
   if (pfSave)
     pfSave.onclick = function () {
       if (!state.profile) state.profile = {};
-      state.profile.name = (document.getElementById('pf-name').value || '').trim();
-      state.profile.email = (document.getElementById('pf-email').value || '').trim();
-      state.profile.phone = (document.getElementById('pf-phone').value || '').trim();
-      state.profile.password = (document.getElementById('pf-password').value || '').trim();
-      if (state.session && (state.session.role === 'admin' || state.session.role === 'developer')) {
-        state.session.name = state.profile.name || 'Admin';
-        state.session.email = state.profile.email || state.session.email;
-        state.session.portalLabel = state.profile.name || 'Admin';
+      var name = (document.getElementById('pf-name').value || '').trim();
+      var email = (document.getElementById('pf-email').value || '').trim();
+      var phone = (document.getElementById('pf-phone').value || '').trim();
+      var password = document.getElementById('pf-password')
+        ? String(document.getElementById('pf-password').value || '')
+        : '';
+      if (!email) {
+        toast('Login ID / email is required');
+        return;
       }
-      log('Admin profile updated', state.profile.name + ' · ' + state.profile.email + ' · ' + (state.profile.phone || 'no phone'));
+      if (!password) {
+        toast('Password is required for login');
+        return;
+      }
+      var prevEmail = state.profile.email || '';
+      state.profile.name = name || 'Admin';
+      state.profile.email = email;
+      state.profile.phone = phone;
+      state.profile.password = password;
+      if (state.session && (state.session.role === 'admin' || state.session.role === 'developer')) {
+        state.session.name = state.profile.name;
+        state.session.email = state.profile.email;
+        state.session.portalLabel = state.profile.name;
+      }
+      log(
+        'Admin credentials updated',
+        state.profile.name +
+          ' · login ' +
+          state.profile.email +
+          (prevEmail && normalizeLoginId(prevEmail) !== normalizeLoginId(email)
+            ? ' (was ' + prevEmail + ')'
+            : '') +
+          ' · password set'
+      );
       persist();
       settingsOpenSection = 'admin';
       render();
-      toast('Admin profile saved');
+      toast('Login credentials saved — use them next sign-in');
     };
 
   // 2 business profile
