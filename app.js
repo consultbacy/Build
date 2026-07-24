@@ -2503,7 +2503,7 @@ function shareHtml() {
   };
 
   return (
-    '<div class="page-head"><h1>Share & Security</h1><p>Quick share by SKU only. Links are watermarked, protected, and expire on your schedule.</p></div>' +
+    '<div class="page-head"><h1>Share & Security</h1><p>Quick share by SKU. Edit any existing link anytime — same URL, update products, access, expiry, or status.</p></div>' +
     (canEdit()
       ? '<div class="card" style="margin-bottom:var(--gap)">' +
         '<h2 class="section-label" style="margin-top:0">Quick share</h2>' +
@@ -2612,7 +2612,7 @@ function shareRow(s) {
         : s.expiresDays + 'd total') +
     '</div></div>' +
     '<div class="link-row-actions">' +
-    (active
+    (!revoked
       ? '<button type="button" class="btn btn-sm" data-open-share="' +
         esc(s.token) +
         '">Open</button>' +
@@ -2621,6 +2621,13 @@ function shareRow(s) {
         '" title="Copy">' +
         icon('copy', 16) +
         '</button>'
+      : '') +
+    (canEdit()
+      ? '<button type="button" class="btn btn-sm" data-edit-share="' +
+        s.id +
+        '">' +
+        icon('edit', 13) +
+        ' Edit</button>'
       : '') +
     (canEdit() && active
       ? '<button type="button" class="btn btn-sm" data-revoke-link="' +
@@ -3442,10 +3449,11 @@ function openShareModal(itemIds, label) {
       '<div class="field"><label>Access</label><select id="m-sh-auth"><option value="password">Password</option><option value="otp">OTP</option><option value="none">Open</option></select></div>' +
       '<div class="field" id="m-sh-pass-wrap"><label>Password</label><input type="text" id="m-sh-password" value="demo123"></div>' +
       '<div class="field"><label>Expiry (days)</label><input type="number" id="m-sh-expiry" min="1" step="1" value="30"></div>' +
-      '<p style="margin:0 0 .55rem;color:var(--text-3);font-size:var(--fs-xs)">Right-click disabled on the shared page.</p>' +
+      '<p style="margin:0 0 .55rem;color:var(--text-3);font-size:var(--fs-xs)">Right-click disabled on the shared page. You can edit this link later from Share & Security.</p>' +
       '<div class="modal-actions"><button class="btn" id="m-cancel">Cancel</button><button class="btn btn-primary" id="m-save">' +
       icon('share', 16) +
-      ' Generate link</button></div>'
+      ' Generate link</button></div>',
+    { wide: true }
   );
   var authSel = document.getElementById('m-sh-auth');
   var passWrap = document.getElementById('m-sh-pass-wrap');
@@ -3494,6 +3502,243 @@ function openShareModal(itemIds, label) {
     var url = location.origin + location.pathname + '#share/' + link.token;
     if (navigator.clipboard) navigator.clipboard.writeText(url).catch(function () {});
     toast(link.otpCode ? 'Link copied · OTP ' + link.otpCode : 'Link created & copied');
+  };
+}
+
+/** Edit an existing share link — same URL (token), update settings/products */
+function openEditShareModal(linkId) {
+  var link = (state.shareLinks || []).find(function (s) {
+    return s.id === linkId;
+  });
+  if (!link) {
+    toast('Share link not found');
+    return;
+  }
+  var selected = {};
+  (link.itemIds || []).forEach(function (id) {
+    selected[id] = true;
+  });
+  var productChecks =
+    (state.items || [])
+      .map(function (it) {
+        return (
+          '<label class="access-check-row">' +
+          '<input type="checkbox" data-edit-sh-item="' +
+          esc(it.id) +
+          '"' +
+          (selected[it.id] ? ' checked' : '') +
+          '>' +
+          '<span><strong>' +
+          esc(it.name || it.sku || it.id) +
+          '</strong>' +
+          (it.sku ? '<div class="access-check-meta">' + esc(it.sku) + '</div>' : '') +
+          '</span></label>'
+        );
+      })
+      .join('') || '<p class="settings-empty">No products yet.</p>';
+
+  var auth = link.authType || (link.passwordValue ? 'password' : 'none');
+  openModal(
+    '<h2>Edit share link</h2>' +
+      '<p style="margin:0 0 .55rem;color:var(--text-2);font-size:var(--fs-xs)">Token <strong>#' +
+      esc(link.token) +
+      '</strong> stays the same — the public URL does not change. Update name, access, expiry, products, or status.</p>' +
+      '<div class="field"><label>Link name</label><input type="text" id="e-sh-name" value="' +
+      esc(link.label || '') +
+      '" placeholder="e.g. For Priya — wholesale"></div>' +
+      '<div class="grid-form-2">' +
+      '<div class="field"><label>Access</label><select id="e-sh-auth">' +
+      '<option value="password"' +
+      (auth === 'password' ? ' selected' : '') +
+      '>Password</option>' +
+      '<option value="otp"' +
+      (auth === 'otp' ? ' selected' : '') +
+      '>OTP</option>' +
+      '<option value="none"' +
+      (auth === 'none' ? ' selected' : '') +
+      '>Open</option></select></div>' +
+      '<div class="field"><label>Status</label><select id="e-sh-status">' +
+      '<option value="active"' +
+      (link.status !== 'revoked' ? ' selected' : '') +
+      '>Active / Allowed</option>' +
+      '<option value="revoked"' +
+      (link.status === 'revoked' ? ' selected' : '') +
+      '>Revoked</option></select></div>' +
+      '<div class="field" id="e-sh-pass-wrap"><label>Password</label><input type="text" id="e-sh-password" value="' +
+      esc(link.passwordValue || '') +
+      '" placeholder="Share password"></div>' +
+      '<div class="field"><label>Expiry (days)</label><input type="number" id="e-sh-expiry" min="1" step="1" value="' +
+      esc(String(link.expiresDays != null && link.expiresDays !== '' ? link.expiresDays : 30)) +
+      '"></div></div>' +
+      (auth === 'otp' || link.otpCode
+        ? '<p style="margin:0 0 .45rem;color:var(--text-3);font-size:var(--fs-xs)">Current OTP: <strong>' +
+          esc(link.otpCode || '—') +
+          '</strong></p>'
+        : '') +
+      '<label class="display-check" style="margin-bottom:.45rem"><input type="checkbox" id="e-sh-reset-timer"> Reset expiry timer from today</label>' +
+      '<label class="display-check" style="margin-bottom:.55rem"><input type="checkbox" id="e-sh-new-otp"> Generate new OTP (if access is OTP)</label>' +
+      '<div class="section-label">Products on this link</div>' +
+      '<p style="margin:0 0 .35rem;color:var(--text-3);font-size:var(--fs-xs)">Tick products included. For catalogue links, products follow the catalogue; you can switch to a selection.</p>' +
+      (link.type === 'catalogue'
+        ? '<div class="field"><label>Share type</label><select id="e-sh-type">' +
+          '<option value="catalogue" selected>Whole catalogue</option>' +
+          '<option value="selection">Custom product selection</option></select></div>' +
+          '<div class="field" id="e-sh-cat-wrap"><label>Catalogue</label><select id="e-sh-cat">' +
+          (state.catalogues || [])
+            .map(function (c) {
+              return (
+                '<option value="' +
+                esc(c.id) +
+                '"' +
+                (c.id === link.catalogueId ? ' selected' : '') +
+                '>' +
+                esc(c.name) +
+                '</option>'
+              );
+            })
+            .join('') +
+          '</select></div>'
+        : '<input type="hidden" id="e-sh-type" value="selection">') +
+      '<div class="access-check-list" id="e-sh-items">' +
+      productChecks +
+      '</div>' +
+      '<div class="settings-actions" style="margin-bottom:.55rem">' +
+      '<button type="button" class="btn btn-sm" id="e-sh-all">Select all</button>' +
+      '<button type="button" class="btn btn-sm" id="e-sh-none">Clear all</button></div>' +
+      '<div class="modal-actions">' +
+      '<button type="button" class="btn" id="m-cancel">Cancel</button>' +
+      '<button type="button" class="btn btn-primary" id="e-sh-save">Save changes</button></div>',
+    { wide: true }
+  );
+
+  var authSel = document.getElementById('e-sh-auth');
+  var passWrap = document.getElementById('e-sh-pass-wrap');
+  function syncAuth() {
+    if (passWrap) passWrap.style.display = authSel && authSel.value === 'password' ? '' : 'none';
+  }
+  if (authSel) authSel.onchange = syncAuth;
+  syncAuth();
+
+  var typeSel = document.getElementById('e-sh-type');
+  var catWrap = document.getElementById('e-sh-cat-wrap');
+  var itemsBox = document.getElementById('e-sh-items');
+  function syncType() {
+    var t = typeSel ? typeSel.value : 'selection';
+    if (catWrap) catWrap.style.display = t === 'catalogue' ? '' : 'none';
+    if (itemsBox) itemsBox.style.opacity = t === 'catalogue' ? '0.45' : '1';
+  }
+  if (typeSel) typeSel.onchange = syncType;
+  syncType();
+
+  var allBtn = document.getElementById('e-sh-all');
+  if (allBtn)
+    allBtn.onclick = function () {
+      if (!itemsBox) return;
+      itemsBox.querySelectorAll('input[type=checkbox]').forEach(function (c) {
+        c.checked = true;
+      });
+    };
+  var noneBtn = document.getElementById('e-sh-none');
+  if (noneBtn)
+    noneBtn.onclick = function () {
+      if (!itemsBox) return;
+      itemsBox.querySelectorAll('input[type=checkbox]').forEach(function (c) {
+        c.checked = false;
+      });
+    };
+
+  document.getElementById('m-cancel').onclick = closeModal;
+  document.getElementById('e-sh-save').onclick = function () {
+    var authType = (document.getElementById('e-sh-auth') && document.getElementById('e-sh-auth').value) || 'none';
+    var exp = Number(document.getElementById('e-sh-expiry') && document.getElementById('e-sh-expiry').value);
+    if (!exp || exp < 1) {
+      toast('Enter expiry days (min 1)');
+      return;
+    }
+    var pass = (document.getElementById('e-sh-password') && document.getElementById('e-sh-password').value) || '';
+    if (authType === 'password' && !String(pass).trim()) {
+      toast('Set a password');
+      return;
+    }
+    var type = (document.getElementById('e-sh-type') && document.getElementById('e-sh-type').value) || link.type || 'selection';
+    var ids = [];
+    if (itemsBox) {
+      itemsBox.querySelectorAll('input[data-edit-sh-item]:checked').forEach(function (c) {
+        ids.push(c.getAttribute('data-edit-sh-item'));
+      });
+    }
+    if (type === 'selection' && !ids.length) {
+      toast('Select at least one product');
+      return;
+    }
+    var prev =
+      (link.label || link.type) +
+      ' · ' +
+      (link.authType || 'none') +
+      ' · ' +
+      (link.status || 'active') +
+      ' · ' +
+      (link.expiresDays || '—') +
+      'd';
+    link.label = (document.getElementById('e-sh-name') && document.getElementById('e-sh-name').value.trim()) || null;
+    link.authType = authType;
+    link.passwordValue = authType === 'password' ? String(pass).trim() : null;
+    link.expiresDays = exp;
+    link.status = (document.getElementById('e-sh-status') && document.getElementById('e-sh-status').value) || 'active';
+    link.watermark = true;
+    link.type = type;
+    if (type === 'catalogue') {
+      link.catalogueId =
+        (document.getElementById('e-sh-cat') && document.getElementById('e-sh-cat').value) || link.catalogueId;
+      // keep itemIds as optional snapshot; public view uses catalogue
+    } else {
+      link.itemIds = ids;
+      link.catalogueId = null;
+      if (ids.length === 1) {
+        var one = (state.items || []).find(function (x) {
+          return x.id === ids[0];
+        });
+        if (one && one.sku) link.sku = one.sku;
+      }
+    }
+    if (document.getElementById('e-sh-reset-timer') && document.getElementById('e-sh-reset-timer').checked) {
+      link.createdAt = Date.now();
+    }
+    var wantNewOtp =
+      document.getElementById('e-sh-new-otp') && document.getElementById('e-sh-new-otp').checked;
+    if (authType === 'otp') {
+      if (wantNewOtp || !link.otpCode) {
+        link.otpCode = String(Math.floor(100000 + Math.random() * 900000));
+      }
+    } else {
+      link.otpCode = null;
+    }
+    log(
+      'Share link updated',
+      '#' +
+        link.token +
+        ' · ' +
+        prev +
+        ' → ' +
+        (link.label || link.type) +
+        ' · ' +
+        authType +
+        ' · ' +
+        link.status +
+        ' · ' +
+        exp +
+        'd' +
+        (type === 'selection' ? ' · ' + ids.length + ' products' : ' · catalogue') +
+        (link.otpCode ? ' · OTP ' + link.otpCode : '')
+    );
+    persist();
+    closeModal();
+    render();
+    toast(
+      link.otpCode && wantNewOtp
+        ? 'Link saved · new OTP ' + link.otpCode
+        : 'Share link updated'
+    );
   };
 }
 
@@ -4134,6 +4379,11 @@ function bindShare() {
       persist();
       location.hash = 'share/' + token;
       render();
+    };
+  });
+  document.querySelectorAll('[data-edit-share]').forEach(function (el) {
+    el.onclick = function () {
+      openEditShareModal(el.getAttribute('data-edit-share'));
     };
   });
   document.querySelectorAll('[data-revoke-link]').forEach(function (el) {
