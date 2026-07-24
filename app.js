@@ -2351,10 +2351,47 @@ function productMetaLine(it) {
   if (szs.length) parts.push(szs.length + ' size' + (szs.length > 1 ? 's' : ''));
   return parts.filter(Boolean).join(' · ') || 'Product';
 }
+function productImagesOf(it) {
+  if (!it) return [];
+  var list = [];
+  if (Array.isArray(it.images)) {
+    it.images.forEach(function (src) {
+      if (src && list.indexOf(src) === -1) list.push(src);
+    });
+  }
+  if (it.image && list.indexOf(it.image) === -1) list.unshift(it.image);
+  return list;
+}
+function productThumbHtml(it, opts) {
+  opts = opts || {};
+  var imgs = productImagesOf(it);
+  var title = it.name || 'Product';
+  var img = imgs[0] || '';
+  var extraClass = opts.wm ? ' wm-wrap' : '';
+  if (!img) {
+    return '<div class="thumb' + extraClass + '">' + icon('hanger', 32) + (opts.wm ? '<span class="wm-mark" aria-hidden="true">CatalogueX</span>' : '') + '</div>';
+  }
+  return (
+    '<button type="button" class="thumb thumb-view' +
+    extraClass +
+    '" data-view-photos="' +
+    esc(it.id) +
+    '" data-view-index="0" title="Tap to view photo' +
+    (imgs.length > 1 ? 's' : '') +
+    '">' +
+    '<img src="' +
+    esc(img) +
+    '" alt="' +
+    esc(title) +
+    '" draggable="false">' +
+    (imgs.length > 1 ? '<span class="thumb-count">' + imgs.length + ' photos</span>' : '') +
+    (opts.wm ? '<span class="wm-mark" aria-hidden="true">CatalogueX</span>' : '') +
+    '</button>'
+  );
+}
 function productCard(it) {
   var d = getProductDisplay();
   var selected = state.selectedItems.indexOf(it.id) > -1;
-  var img = it.image || (it.images && it.images[0]) || '';
   var title = it.name || 'Product';
   return (
     '<div class="product-card ' +
@@ -2363,11 +2400,7 @@ function productCard(it) {
     (canShare()
       ? '<input class="chk" type="checkbox" data-select-item="' + it.id + '" ' + (selected ? 'checked' : '') + ' title="Select to share">'
       : '') +
-    (d.image !== false
-      ? '<div class="thumb">' +
-        (img ? '<img src="' + esc(img) + '" alt="' + esc(title) + '">' : icon('hanger', 32)) +
-        '</div>'
-      : '') +
+    (d.image !== false ? productThumbHtml(it, {}) : '') +
     '<div class="body">' +
     (d.name !== false ? '<h3>' + esc(title) + '</h3>' : '') +
     productSpecsChipsHtml(it) +
@@ -3000,12 +3033,8 @@ function publicHtml() {
         var a = availOf(it);
         return (
           '<div class="product-card">' +
-          '<div class="thumb wm-wrap">' +
-          (it.image
-            ? '<img src="' + esc(it.image) + '" alt="' + esc(it.name) + '" draggable="false">'
-            : icon('hanger', 32)) +
-          '<span class="wm-mark" aria-hidden="true">CatalogueX</span>' +
-          '</div><div class="body">' +
+          productThumbHtml(it, { wm: true }) +
+          '<div class="body">' +
           '<h3>' +
           esc(it.name) +
           '</h3>' +
@@ -3064,6 +3093,7 @@ function bindPublic() {
   var s = getShareByToken(publicToken);
   if (!s) return;
   bindPublicProtection();
+  bindPhotoViewers(document);
 
   var authGo = document.getElementById('pub-auth-go');
   var otpSend = document.getElementById('pub-otp-send');
@@ -3161,6 +3191,151 @@ function openModal(html, opts) {
 function closeModal() {
   var m = document.getElementById('modal-backdrop');
   if (m) m.remove();
+}
+
+/** Full-screen photo viewer — admin product page + client share links */
+function closePhotoViewer() {
+  var el = document.getElementById('photo-viewer');
+  if (el) el.remove();
+  document.body.classList.remove('photo-viewer-open');
+}
+function openPhotoViewer(images, startIndex, title) {
+  images = (images || []).filter(Boolean);
+  if (!images.length) {
+    toast('No photos to view');
+    return;
+  }
+  var idx = Math.max(0, Math.min(Number(startIndex) || 0, images.length - 1));
+  title = title || 'Photo';
+  closePhotoViewer();
+  var wrap = document.createElement('div');
+  wrap.id = 'photo-viewer';
+  wrap.className = 'photo-viewer';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-label', 'Photo viewer');
+  function paint() {
+    wrap.innerHTML =
+      '<div class="photo-viewer-bar">' +
+      '<div class="photo-viewer-title">' +
+      esc(title) +
+      (images.length > 1 ? ' · ' + (idx + 1) + ' / ' + images.length : '') +
+      '</div>' +
+      '<button type="button" class="icon-btn photo-viewer-close" title="Close" aria-label="Close">' +
+      icon('x', 18) +
+      '</button></div>' +
+      '<div class="photo-viewer-stage">' +
+      (images.length > 1
+        ? '<button type="button" class="photo-viewer-nav prev" title="Previous" aria-label="Previous">' +
+          '‹</button>'
+        : '') +
+      '<img class="photo-viewer-img" src="' +
+      esc(images[idx]) +
+      '" alt="' +
+      esc(title) +
+      '" draggable="false">' +
+      (images.length > 1
+        ? '<button type="button" class="photo-viewer-nav next" title="Next" aria-label="Next">' +
+          '›</button>'
+        : '') +
+      '</div>' +
+      (images.length > 1
+        ? '<div class="photo-viewer-dots">' +
+          images
+            .map(function (_, i) {
+              return (
+                '<button type="button" class="photo-viewer-dot' +
+                (i === idx ? ' active' : '') +
+                '" data-pv-i="' +
+                i +
+                '" aria-label="Photo ' +
+                (i + 1) +
+                '"></button>'
+              );
+            })
+            .join('') +
+          '</div>'
+        : '');
+    wrap.querySelector('.photo-viewer-close').onclick = function (e) {
+      e.stopPropagation();
+      closePhotoViewer();
+    };
+    var prev = wrap.querySelector('.photo-viewer-nav.prev');
+    var next = wrap.querySelector('.photo-viewer-nav.next');
+    if (prev)
+      prev.onclick = function (e) {
+        e.stopPropagation();
+        idx = (idx - 1 + images.length) % images.length;
+        paint();
+      };
+    if (next)
+      next.onclick = function (e) {
+        e.stopPropagation();
+        idx = (idx + 1) % images.length;
+        paint();
+      };
+    wrap.querySelectorAll('[data-pv-i]').forEach(function (btn) {
+      btn.onclick = function (e) {
+        e.stopPropagation();
+        idx = Number(btn.getAttribute('data-pv-i')) || 0;
+        paint();
+      };
+    });
+    var stage = wrap.querySelector('.photo-viewer-stage');
+    if (stage)
+      stage.onclick = function (e) {
+        if (e.target === stage) closePhotoViewer();
+      };
+  }
+  paint();
+  wrap.addEventListener('click', function (e) {
+    if (e.target === wrap) closePhotoViewer();
+  });
+  wrap.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+  });
+  document.addEventListener(
+    'keydown',
+    function onKey(e) {
+      if (!document.getElementById('photo-viewer')) {
+        document.removeEventListener('keydown', onKey);
+        return;
+      }
+      if (e.key === 'Escape') closePhotoViewer();
+      if (e.key === 'ArrowLeft' && images.length > 1) {
+        idx = (idx - 1 + images.length) % images.length;
+        paint();
+      }
+      if (e.key === 'ArrowRight' && images.length > 1) {
+        idx = (idx + 1) % images.length;
+        paint();
+      }
+    },
+    true
+  );
+  document.body.appendChild(wrap);
+  document.body.classList.add('photo-viewer-open');
+}
+function bindPhotoViewers(root) {
+  root = root || document;
+  root.querySelectorAll('[data-view-photos]').forEach(function (el) {
+    el.onclick = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var id = el.getAttribute('data-view-photos');
+      var start = Number(el.getAttribute('data-view-index') || 0) || 0;
+      var it =
+        (state.items || []).find(function (x) {
+          return x.id === id;
+        }) || null;
+      if (!it) {
+        // allow raw image src list via data-view-src (edit previews)
+        var raw = el.getAttribute('data-view-src');
+        if (raw) openPhotoViewer([raw], 0, 'Photo');
+        return;
+      }
+      openPhotoViewer(productImagesOf(it), start, it.name || 'Product');
+    };
+  });
 }
 
 /** Assign which products a managed user can access */
@@ -3453,16 +3628,27 @@ function bindPhotoUpload(workingImages, removedPhotos) {
       .filter(function (x) {
         return !removedPhotos[x.i];
       });
+    var allSrc = kept.map(function (x) {
+      return x.src;
+    });
     box.innerHTML = kept.length
       ? kept
-          .map(function (x) {
+          .map(function (x, ki) {
             return (
               '<div class="photo-thumb" data-photo-i="' +
               x.i +
               '">' +
+              '<button type="button" class="photo-thumb-open" data-view-src="' +
+              esc(x.src) +
+              '" data-view-gallery="' +
+              esc(JSON.stringify(allSrc)) +
+              '" data-view-index="' +
+              ki +
+              '" title="Tap to view">' +
               '<img src="' +
               esc(x.src) +
-              '" alt="Photo">' +
+              '" alt="Photo" draggable="false">' +
+              '</button>' +
               '<button type="button" class="icon-btn photo-remove" data-photo-remove="' +
               x.i +
               '" title="Remove">' +
@@ -3473,9 +3659,24 @@ function bindPhotoUpload(workingImages, removedPhotos) {
           .join('')
       : '<p class="settings-empty">No photos yet.</p>';
     box.querySelectorAll('[data-photo-remove]').forEach(function (btn) {
-      btn.onclick = function () {
+      btn.onclick = function (e) {
+        e.stopPropagation();
         removedPhotos[Number(btn.getAttribute('data-photo-remove'))] = true;
         refreshPreview();
+      };
+    });
+    box.querySelectorAll('[data-view-gallery]').forEach(function (btn) {
+      btn.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var list = [];
+        try {
+          list = JSON.parse(btn.getAttribute('data-view-gallery') || '[]');
+        } catch (err) {
+          list = [btn.getAttribute('data-view-src')];
+        }
+        var start = Number(btn.getAttribute('data-view-index') || 0) || 0;
+        openPhotoViewer(list, start, 'Photos');
       };
     });
   }
@@ -3542,6 +3743,7 @@ function bindView() {
   if (state.view === 'product') bindProduct();
   if (state.view === 'share') bindShare();
   if (state.view === 'settings' && isAdmin()) bindSettings();
+  bindPhotoViewers(document);
 }
 
 function bindInterests() {
